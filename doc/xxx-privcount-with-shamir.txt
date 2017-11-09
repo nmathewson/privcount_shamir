@@ -1,0 +1,479 @@
+Filename: xxx-privcount-with-shamir.txt
+Title: Privacy-Preserving Statistics with Privcount in Tor
+Author: Nick Mathewson, Tim Wilson-Brown
+Created: 02-Nov-2017
+Status: Draft
+
+0. Acknowledgments
+
+  Tariq Elahi, George Danezis, and Ian Goldberg designed and implemented
+  the PrivEx blinding scheme. Rob Jansen and Aaron Johnson extended
+  PrivEx's differential privacy guarantees to multiple counters in
+  PrivCount:
+
+  https://github.com/privcount/privcount/blob/master/README.markdown#research-background
+
+  Rob Jansen and Tim Wilson-Brown wrote the majority of the experimental
+  PrivCount code, based on the PrivEx secret-sharing variant. This
+  implementation includes contributions from the PrivEx authors, and
+  others:
+
+  https://github.com/privcount/privcount/blob/master/CONTRIBUTORS.markdown
+
+  This research was supported in part by NSF grants CNS-1111539,
+  CNS-1314637, CNS-1526306, CNS-1619454, and CNS-1640548.
+
+1. Introduction and scope
+
+  PrivCount is a privacy-preserving way to collect aggregate statistics
+  about the Tor network without exposing the statistics from any single
+  Tor relay.
+
+  This document describes the behavior of the in-Tor portion of the
+  PrivCount system.  It DOES NOT describe the counter configurations,
+  or any other parts of the system. (These will be covered in separate
+  proposals.)
+
+2. PrivCount overview
+
+  Here follows an oversimplified summary of PrivCount, with enough
+  information to explain the Tor side of things.  The actual operation
+  of the non-Tor components is trickier than described below.
+
+  In PrivCount, a Data Collector (in this case a Tor relay) shares
+  numeric data with N different Tally Reporters. (A Tally Reporter
+  performs the summing and unblinding roles of the Tally Server and Share
+  Keeper from experimental PrivCount.)
+
+  All N Tally Reporters together can reconstruct the original data, but
+  no (N-1)-sized subset of the Tally Reporters can learn anything about
+  the data.
+
+  (In reality, the Tally Reporters don't reconstruct the original data
+  at all! Instead, they will reconstruct a _sum_ of the original data
+  across all participating relays.)
+
+  In brief, the system works as follow:
+
+  To share data, for each counter value V to be shared, the relay first adds
+  Gaussian noise to V in order to produce V', uses Shamir
+  secret-sharing to generate K shares of V' (K<=N), and encrypts each
+  share to a different tally reporter.  Each tally reporters adds all of
+  the shares that it received for each counter, and publishes the total
+  share.  The tally reporters then, collectively, perform secret
+  reconstruction, and learn the sum of all the different V values.
+
+  In order to prevent bogus data from corrupting the tally, the Tally
+  Reporters can perform this algorithm several times, with different
+  subsets of the data.  The use of Shamir secret sharing lets us
+  survive up to N-K crashing TRs.
+
+  Below we describe the algorithm in more detail, and describe the data
+  format to use.
+
+3. The algorithm
+
+  All values below are B-bit integers modulo some prime P; we suggest
+  B=64 and P = 2**64 - 257 (hex fffffffffffffeff).  The size of this
+  field is an upper limit on the largest sum we can calculate; it is not
+  a security parameter.
+
+  There are N tally reporters: every participating relay must agree on
+  which N exist, and on their current public keys.  We suggest listing
+  them in the consensus networkstatus document.  All parties must also
+  agree on some ordering the tally reporters.  Similarly, all parties
+  must also agree on some value K<N.
+
+  There are a number of well-known "counters", identified known by ASCII
+  identifiers.  Each counter is a value that the participating relays
+  will know how to count.  Let C be the number of counters.
+
+3.1. Data collection side
+
+  At the start of each period, every data collector ("client" below)
+  initializes their state as follows
+
+      1. For every tally reporter with index i, the client constructs a
+         random value SEED_i.  The client then generates
+         a pseudorandom bitstream of C*B bits using the SHAKE-256
+         XOF with SEED_i as its input, and divides this stream into
+         C values, with the c'th value denoted by MASK(i, c).
+
+         [Because P is very close to a power of 2, nearly all seeds will
+         produce MASK values in range 0...(P-1).  If any does not, the
+         client picks a new seed.]
+
+      2. The client encrypts SEED_i using the public key of Tally
+         Reporter i, and remembers this encrypted value.  It discards
+         SEED_i.
+
+      3. For every counter j, the client generates a noise value Z_j
+         from an appropriate gaussian distribution, and uses Shamir
+         secret sharing to generate N shares (x,y) of Z, 1 <= x <= N,
+         with the x'th share to be used by the x'th Tally Reporter.  See
+         Appendix A for more on Shamir secret sharing.  See Appendix B
+         for another idea about X coordinates.
+
+         The client picks a random value CTR_j.
+
+         The client then subtracts (MASK(x, c)+CTR) from y, giving
+         "encrypted shares" of (x, y0) where y0 = y-MASK(x,c)-CTR.
+
+         The client then discards all MASK values, and all original
+         shares (x,y), and the noise value Z_j. For each counter j, it
+         remembers CTR_j, and N shares of the form (x, y0).
+
+  To increment a counter by some value "inc":
+
+      1. The client adds "inc" to the CTR_j value for that counter,
+         modulo P.
+
+         (This step is chosen to be optimal, since it will happen more
+         frequently than any other step in the computation.)
+
+  To publish the counter values:
+
+      1. The client publishes, in the format described below:
+
+         The list of counters it knows about
+         The list of TRs it knows about
+         For each TR, encrypted to that TR's public key:
+            For each counter j:
+                A list of (x, CTR_j + y0), for the share (x,y0)
+                corresponding to CTR_j and the TR.
+            SEED_i as encrypted earlier to TR's public key.
+
+3.2. TR side
+
+  This section is less completely specified than the data collector's
+  behavior: I expect that the TRs will be easier to update as we procede.
+
+  (Each TR has a long-term identity key (ed25519).  It also has a
+  sequence of short-term curve25519 keys, each associated with a single
+  round of data collection.)
+
+   1. When a group or TRs receives information from the data collectors,
+      they collectively chose a set of DCs and a set of counters such
+      that every TR in the group has a valid entry for every counter,
+      from every DC in the set.
+
+      To be valid, an entry must not only be well-formed, but must also
+      have the x coordinate in its shares corresponding to the
+      TR's position in the list of TRs.
+
+   2. For each data collector's report, each TR decrypts its part of the
+      client's report using its curve25519 key.  It uses SEED_i and
+      SHAKE-256 to regenerate MASK(0) through MASK(C-1).  Then for each
+      share (x, CTR_j + y0), the TR reconstructs the true share for that
+      (client,counter) pair as (x, y_final), where
+      y_final = CTR_j + y0 + MASK(j)).
+
+   3. For every counter in the set, each TR computes the sum of the
+      y_final values from all clients.
+
+   4. For every counter in the set, each TR publishes its a share of
+      the sum as (x, SUM(y_final)).
+
+   5. If at least K TRs publish correctly, then the sum can be
+      reconstructed using lagrange polynomial interpolation. (See
+      Appendix A).
+
+
+4. The document format
+
+  This document format builds on the line-based directory format used
+  for other tor documents, described in Tor's dir-spec.txt.
+
+  Using this format, we describe a "counters" document that
+  publishes all the Y values for a given client.
+
+  The "counters" document has these elements:
+
+    "privctr-dump-format" SP VERSION SP SigningKey
+
+       [At start, exactly once]
+
+       Describes the version of the dump format, and provides an ed25519
+       signing key to identify the relay.  The signing key is encoded in
+       base64 with padding stripped. VERSION is "alpha" now, but should
+       be "1" once this document is finalized.
+
+       [[[TODO: Do we need a counter version as well?
+
+          Noise is distributed across a particular set of counters,
+          to provide differential privacy guarantees for those counters.
+          Reducing noise requires a break in the collection.
+          Adding counters is ok if the noise on each counter
+          monotonically increases. (Removing counters always reduces
+          noise.)
+
+          We also need to work out how to handle instances with mixed
+          Tor versions, where some Data Collectors report a different
+          set of counters than other Data Collectors. (The blinding works
+          if we substitute zeroes for missing counters on Tally Reporters.
+          But we also need to add noise in this case.)
+
+          -teor
+        ]]]
+
+    "starting-at" SP IsoTime
+
+       [Exactly once]
+
+       The start of the time period when the statistics here were
+       collected.
+
+    "ending-at" SP IsoTime
+
+       [Exactly once]
+
+       The end of the time period when the statistics here were
+       collected.
+
+    "share-parameters" SP Number SP Number
+
+       [Exactly once]
+
+       The number of shares needed to reconstruct the client's
+       measurements (K), and the number of shares produced (N),
+       respectively.
+
+    "tally-reporter" SP Identifier SP Key SP InstanceNumbers
+
+       [At least twice]
+
+       The curve25519 public key of each Tally Reporter that the relay
+       believes in.  (If the list does not match the list of
+       participating tally reporters, they won't be able to find the
+       relay's values correctly.)  The identifiers are non-space,
+       non-nul character sequences.  The Key values are encoded in
+       base64 with padding stripped; they must be unique within each
+       counters document.
+
+    "encrypted-to-key" SP Key
+
+       [Exactly once]
+
+       XXXX who gets thi
+
+
+    "report" NL
+    "----- BEGIN ENCRYPTED MESSAGE-----" NL
+    Base64Data
+    "----- END ENCRYPTED MESSAGE-----" NL
+
+    Keyword ":" SP Int SP Int SP Int ...
+
+       [Any number of times]
+
+       The Y values for a single measurement.  There are num-instances
+       such Y values for each measurement.  They are 64-bit unsigned
+       integers, expressed in decimal.
+
+       The "Keyword" denotes which measurement is being shared. Keyword
+       MAY be any sequence of characters other than colon, nul, space,
+       and newline, though implementators SHOULD avoid getting too
+       creative here.  Keywords MUST be unique within a single document.
+       Tally Reporters MUST handle unrecognized keywords.  Keywords MAY
+       appear in any order.
+
+       It is safe to send the blinded totals for each instance to every
+       Tally Reporter. To unblind the totals, a Tally Reporter needs:
+         * a blinding document from each relay in the instance, and
+         * the per-counter blinding sums from the other Tally Reporters
+           in their instance.
+
+       [[[TODO: But is it safer to create a per-instance counters
+          document? -- teor]]]
+
+       The semantics of individual measurements are not specified here.
+
+    "signature" SP Signature
+
+       [At end, exactly once]
+
+       The Ed25519 signature of all the fields in the document, from the
+       first byte, up to but not including the "signature" keyword here.
+       The signature is encoded in base64 with padding stripped.
+
+
+  The "blinding" document has these elements:
+
+    "privctr-secret-offsets" SP VERSION SP SigningKey
+
+       [At start, exactly once.]
+
+       The VERSION and SigningKey parameters are the same as for
+       "privctr-dump-format".
+
+    "instances" SP Numbers
+
+       [Exactly once]
+
+       The instances that this Tally Reporter handles.
+       They are given as comma-separated decimal integers, as in the
+       "tally-reporter" entry in the counters document.  They MUST
+       match the instances listed in the counters document.
+
+       [[[TODO: this is redundant. Specify the constraint instead? --teor]]]
+
+    "num-counters" SP Number
+
+       [Exactly once]
+
+       The number of counters that the relay used in its counters
+       document. This MUST be equal to the number of keywords in the
+       counters document.
+
+       [[[TODO: this is redundant. Specify the constraint instead? --teor]]]
+
+    "tally-reporter-pubkey" SP Key
+
+       [Exactly once]
+
+       The curve25519 public key of the tally reporter who is intended
+       to receive and decrypt this document.  The key is base64-encoded
+       with padding stripped.
+
+    "count-document-digest" SP "sha3" Digest NL
+    "-----BEGIN ENCRYPTED DATA-----" NL
+    Data
+    "-----END ENCRYPTED DATA-----" NL
+
+       [Exactly once]
+
+       The SHA3-256 digest of the count document corresponding to this
+       blinding document.  The digest is base64-encoded with padding
+       stripped.  The data encodes the blinding values (See "The
+       Blinding Values") below, and is encrypted to the tally reporter's
+       public key using the hybrid encryption algorithm described below.
+
+    "signature" SP Signature
+
+       [At end, exactly once]
+
+       The Ed25519 signature of all the fields in the document, from the
+       first byte, up to but not including the "signature" keyword here.
+       The signature is encoded in base64 with padding stripped.
+
+
+4. The Blinding Values
+
+  The "Data" field of the blinding documents above, when decrypted,
+  yields a sequence of 64-bit binary values, encoded in network
+  (big-endian) order.  There are C * R such values, where C is the number
+  of keywords in the count document, and R is the number of instances
+  that the Tally Reporter participates in. The client generates all of
+  these values uniformly at random.
+
+  For each keyword in the count document, in the order specified by the
+  count document, the decrypted data holds R*8 bytes for the specified
+  instance of that keyword's blinded counter.
+
+  For example: if the count document lists the keywords "b", "x", "g",
+  and "a" (in that order), and lists instances "0" and "2", then the
+  decrypted data will hold the blinding values in this order:
+      b, instance 0
+      b, instance 2
+      x, instance 0
+      x, instance 2
+      g, instance 0
+      g, instance 2
+      a, instance 0
+      a, instance 2
+
+
+4. Implementation Notes
+
+  A relay should, when starting a new round, generate all the blinding
+  values and noise values in advance.  The relay should then use these
+  values to compute Y_0 = SUM(B_i) + Z for each instance of each
+  counter.  Having done this, the relay MUST encrypt the blinding values
+  to the public key of each tally reporter, and wipe them from memory.
+
+
+5. The hybrid encryption algorithm
+
+  We use a hybrid encryption scheme above, where items can be encrypted
+  to a public key.  We instantiate it as follows, using curve25519
+  public keys.
+
+  To encrypt a plaintext M to a public key PK1
+     1. the sender generates a new ephemeral keypair sk2, PK2.
+     2. The sender computes the shared diffie hellman secret
+        SEED = (sk2 * PK1).
+
+     3. The sender derives 64 bytes of key material as
+          SHAKE256(TEXT | SEED)[...64]
+        where "TEXT" is "Expand curve25519 for privcount encryption".
+
+        The first 32 bytes of this is an aes key K1;
+        the second 32 bytes are a mac key K2.
+
+     4. The sender computes a ciphertext C as AES256_CTR(K1, M)
+
+     5. The sender computes a MAC as
+          SHA3_256([00 00 00 00  00 00 00 20] | K2 | C)
+
+     6. The hybrid-encrypted text is PK2 | MAC | C.
+
+
+
+Appendix A. Shamir secret sharing for the impatient
+
+   In Shamir secret sharing, you want to split a value in a finite
+   field into N shares, such that any K of the N shares can
+   reconstruct the original value, but K-1 shares give you no
+   information at all.
+
+   The key insight here is that you can reconstruct an K+1-degree
+   polynomial given K distinct points on its curve, but not given
+   K-1 points.
+
+   So, to split a secret, we going to generate a (K-1)-degree
+   polynomial.  We'll make the Y intercept of the polynomial be our
+   secret, and choose all the other coefficients at random from our
+   field.
+
+   Then we compute the (x,y) coordinates for x in [1, N].  Now we
+   have N points, any K of which can be used to find the original
+   polynomial.
+
+   Moreover, we can do what privcount wants here, because adding the
+   y coordinates of N shares gives us shares of the sum:  If P1 is
+   the polynomial made to share secret A and P2 is the polynomial
+   made to share secret B, and if (x,y1) is on P1 and (x,y2) is on
+   P2, then (x,y1+y2) will be on P1+P2 ... and moreover, the y
+   intercept of P1+P2 will be A+B.
+
+   To reconstruct a secret from a set of shares, you have to either
+   go learn about Lagrange polynomials, or just blindly copy a
+   formula from your favorite source.
+
+   Here is such a formula, as pseudocode^Wpython, assuming that
+   shares are objects with a _x field and a _y field.
+
+     def interpolate(shares):
+        for sh in shares:
+           product_num = FE(1)
+           product_denom = FE(1)
+           for sh2 in shares:
+               if sh2 is sh:
+                   continue
+               product_num *= sh2._x
+               product_denom *= (sh2._x - sh._x)
+
+           accumulator += (sh._y * product_num) / product_denom
+
+       return accumulator
+
+Appendix B. An alternative way to pick X coordinates
+
+   Above we describe a system where everybody knows the same TRs and
+   puts them in the same order, and then does shamir secret sharing
+   using "x" as the x coordinate for the x'th TR.
+
+   But what if we remove that requirement by having x be based on a hash
+   of the public key of the TR?  Everything would still work, so long as
+   all users chose the same K value.  It would also let us migrate TR
+   sets a little more gracefully.
