@@ -1,8 +1,4 @@
-Filename: xxx-privcount-with-shamir.txt
-Title: Privacy-Preserving Statistics with Privcount in Tor
-Author: Nick Mathewson, Tim Wilson-Brown
-Created: 02-Nov-2017
-Status: Draft
+
 
 0. Acknowledgments
 
@@ -94,7 +90,7 @@ Status: Draft
   initializes their state as follows
 
       1. For every tally reporter with index i, the client constructs a
-         random value SEED_i.  The client then generates
+         random 32-byte random value SEED_i.  The client then generates
          a pseudorandom bitstream of C*B bits using the SHAKE-256
          XOF with SEED_i as its input, and divides this stream into
          C values, with the c'th value denoted by MASK(i, c).
@@ -181,11 +177,13 @@ Status: Draft
 
 4. The document format
 
+4.1. The counters document.
+
   This document format builds on the line-based directory format used
   for other tor documents, described in Tor's dir-spec.txt.
 
-  Using this format, we describe a "counters" document that
-  publishes all the Y values for a given client.
+  Using this format, we describe a "counters" document that publishes
+  the shares collected by a given DC, for a single TR.
 
   The "counters" document has these elements:
 
@@ -194,7 +192,7 @@ Status: Draft
        [At start, exactly once]
 
        Describes the version of the dump format, and provides an ed25519
-       signing key to identify the relay.  The signing key is encoded in
+       signing key to identify the relay. The signing key is encoded in
        base64 with padding stripped. VERSION is "alpha" now, but should
        be "1" once this document is finalized.
 
@@ -238,7 +236,7 @@ Status: Draft
        measurements (K), and the number of shares produced (N),
        respectively.
 
-    "tally-reporter" SP Identifier SP Key SP InstanceNumbers
+    "tally-reporter" SP Identifier SP Integer SP Key
 
        [At least twice]
 
@@ -248,45 +246,27 @@ Status: Draft
        relay's values correctly.)  The identifiers are non-space,
        non-nul character sequences.  The Key values are encoded in
        base64 with padding stripped; they must be unique within each
-       counters document.
+       counters document.  The Integer values are the X coordinate of
+       the shares associated with each tally-reporter.
 
     "encrypted-to-key" SP Key
 
        [Exactly once]
 
-       XXXX who gets thi
+       The curve25519 public key to which the report below is encrypted.
+       Note that it must match one of the tally-reporter options above.
 
 
     "report" NL
-    "----- BEGIN ENCRYPTED MESSAGE-----" NL
-    Base64Data
-    "----- END ENCRYPTED MESSAGE-----" NL
+      "----- BEGIN ENCRYPTED MESSAGE-----" NL
+      Base64Data
+      "----- END ENCRYPTED MESSAGE-----" NL
 
-    Keyword ":" SP Int SP Int SP Int ...
+      [Exactly once]
 
-       [Any number of times]
-
-       The Y values for a single measurement.  There are num-instances
-       such Y values for each measurement.  They are 64-bit unsigned
-       integers, expressed in decimal.
-
-       The "Keyword" denotes which measurement is being shared. Keyword
-       MAY be any sequence of characters other than colon, nul, space,
-       and newline, though implementators SHOULD avoid getting too
-       creative here.  Keywords MUST be unique within a single document.
-       Tally Reporters MUST handle unrecognized keywords.  Keywords MAY
-       appear in any order.
-
-       It is safe to send the blinded totals for each instance to every
-       Tally Reporter. To unblind the totals, a Tally Reporter needs:
-         * a blinding document from each relay in the instance, and
-         * the per-counter blinding sums from the other Tally Reporters
-           in their instance.
-
-       [[[TODO: But is it safer to create a per-instance counters
-          document? -- teor]]]
-
-       The semantics of individual measurements are not specified here.
+      An encrypted document, encoded in base64. The plaintext format is
+      described in section 4.2. below. The encryption is as specified in
+      section 5 below, with STRING_CONSTANT set to "privctr-shares-v1".
 
     "signature" SP Signature
 
@@ -296,127 +276,48 @@ Status: Draft
        first byte, up to but not including the "signature" keyword here.
        The signature is encoded in base64 with padding stripped.
 
+4.2. The encrypted "shares" document.
 
-  The "blinding" document has these elements:
+  The shares document is send, encrypted, in the "report" element above.
+  Its plaintext contents include these fields:
 
-    "privctr-secret-offsets" SP VERSION SP SigningKey
+   "encrypted-seed" NL
+      "----- BEGIN ENCRYPTED MESSAGE-----" NL
+      Base64Data
+      "----- END ENCRYPTED MESSAGE-----" NL
 
-       [At start, exactly once.]
+      [At start, exactly once.]
 
-       The VERSION and SigningKey parameters are the same as for
-       "privctr-dump-format".
+      An encrypted document, encoded in base64. The plaintext value is
+      the 32-byte value SEED_i for this TR. The encryption is as
+      specified in section 5 below, with STRING_CONSTANT set to
+      "privctr-seed-v1".
 
-    "instances" SP Numbers
+   "d" SP Keyword SP Integer
 
-       [Exactly once]
+      [Any number of times]
 
-       The instances that this Tally Reporter handles.
-       They are given as comma-separated decimal integers, as in the
-       "tally-reporter" entry in the counters document.  They MUST
-       match the instances listed in the counters document.
+      For each counter, the name of the counter, and the obfuscated Y
+      coordinate of this TR's share for that counter.  (The Y coordinate
+      is calculated as CTR_j+y0 as in 3.1 above.)  The order of counters
+      must correspond to the order used when ; different clients do not
+      need to choose the same order.
 
-       [[[TODO: this is redundant. Specify the constraint instead? --teor]]]
+5. Hybrid encryption
 
-    "num-counters" SP Number
+   This scheme is taken from rend-spec-v3.txt, section 2.5.3, replacing
+   "secret_input" and "STRING_CONSTANT".  It is a hybrid encryption
+   method for encrypting a message to a curve25519 public key PK.
 
-       [Exactly once]
+     We generate a new curve25519 keypair (sk,pk).
 
-       The number of counters that the relay used in its counters
-       document. This MUST be equal to the number of keywords in the
-       counters document.
+     We run the algorithm of rend-spec-v3.txt 2.5.3, replacing
+     "secret_input" with Curve25519(sk,PK) | salt | SigningKey, where
+     SigningKey is the DC's signing key.  (Including the DC's SigningKey
+     here prevents one DC from replaying another one's data.)
 
-       [[[TODO: this is redundant. Specify the constraint instead? --teor]]]
-
-    "tally-reporter-pubkey" SP Key
-
-       [Exactly once]
-
-       The curve25519 public key of the tally reporter who is intended
-       to receive and decrypt this document.  The key is base64-encoded
-       with padding stripped.
-
-    "count-document-digest" SP "sha3" Digest NL
-    "-----BEGIN ENCRYPTED DATA-----" NL
-    Data
-    "-----END ENCRYPTED DATA-----" NL
-
-       [Exactly once]
-
-       The SHA3-256 digest of the count document corresponding to this
-       blinding document.  The digest is base64-encoded with padding
-       stripped.  The data encodes the blinding values (See "The
-       Blinding Values") below, and is encrypted to the tally reporter's
-       public key using the hybrid encryption algorithm described below.
-
-    "signature" SP Signature
-
-       [At end, exactly once]
-
-       The Ed25519 signature of all the fields in the document, from the
-       first byte, up to but not including the "signature" keyword here.
-       The signature is encoded in base64 with padding stripped.
-
-
-4. The Blinding Values
-
-  The "Data" field of the blinding documents above, when decrypted,
-  yields a sequence of 64-bit binary values, encoded in network
-  (big-endian) order.  There are C * R such values, where C is the number
-  of keywords in the count document, and R is the number of instances
-  that the Tally Reporter participates in. The client generates all of
-  these values uniformly at random.
-
-  For each keyword in the count document, in the order specified by the
-  count document, the decrypted data holds R*8 bytes for the specified
-  instance of that keyword's blinded counter.
-
-  For example: if the count document lists the keywords "b", "x", "g",
-  and "a" (in that order), and lists instances "0" and "2", then the
-  decrypted data will hold the blinding values in this order:
-      b, instance 0
-      b, instance 2
-      x, instance 0
-      x, instance 2
-      g, instance 0
-      g, instance 2
-      a, instance 0
-      a, instance 2
-
-
-4. Implementation Notes
-
-  A relay should, when starting a new round, generate all the blinding
-  values and noise values in advance.  The relay should then use these
-  values to compute Y_0 = SUM(B_i) + Z for each instance of each
-  counter.  Having done this, the relay MUST encrypt the blinding values
-  to the public key of each tally reporter, and wipe them from memory.
-
-
-5. The hybrid encryption algorithm
-
-  We use a hybrid encryption scheme above, where items can be encrypted
-  to a public key.  We instantiate it as follows, using curve25519
-  public keys.
-
-  To encrypt a plaintext M to a public key PK1
-     1. the sender generates a new ephemeral keypair sk2, PK2.
-     2. The sender computes the shared diffie hellman secret
-        SEED = (sk2 * PK1).
-
-     3. The sender derives 64 bytes of key material as
-          SHAKE256(TEXT | SEED)[...64]
-        where "TEXT" is "Expand curve25519 for privcount encryption".
-
-        The first 32 bytes of this is an aes key K1;
-        the second 32 bytes are a mac key K2.
-
-     4. The sender computes a ciphertext C as AES256_CTR(K1, M)
-
-     5. The sender computes a MAC as
-          SHA3_256([00 00 00 00  00 00 00 20] | K2 | C)
-
-     6. The hybrid-encrypted text is PK2 | MAC | C.
-
+     We transmit the encrypted data as in rend-spec-v3.txt 2.5.3,
+     prepending pk.
 
 
 Appendix A. Shamir secret sharing for the impatient
@@ -451,7 +352,7 @@ Appendix A. Shamir secret sharing for the impatient
    formula from your favorite source.
 
    Here is such a formula, as pseudocode^Wpython, assuming that
-   shares are objects with a _x field and a _y field.
+   each share is an object with a _x field and a _y field.
 
      def interpolate(shares):
         for sh in shares:
@@ -467,6 +368,7 @@ Appendix A. Shamir secret sharing for the impatient
 
        return accumulator
 
+
 Appendix B. An alternative way to pick X coordinates
 
    Above we describe a system where everybody knows the same TRs and
@@ -477,3 +379,26 @@ Appendix B. An alternative way to pick X coordinates
    of the public key of the TR?  Everything would still work, so long as
    all users chose the same K value.  It would also let us migrate TR
    sets a little more gracefully.
+
+
+Appendix Z. Remaining client-side uncertainties
+
+   [These are the uncertainties at the client side. I'm not considering
+    TR-only operations here unless they affect clients.]
+
+   Should we do a multi-level thing for the signing keys?  That is, have
+   an identity key for each TR and each DC, and use those to sign
+   short-term keys?
+
+   How to tell the DCs the parameters of the system, including:
+      - who the TRs are, and what their keys are?
+      - what the counters are, and how much noise to add to each?
+      - when the collection intervals start and end?
+
+   How the DCs agree on whose data to collect?
+
+   How data is uploaded to DCs?
+
+   What to say about persistence on the DC side?
+
+
