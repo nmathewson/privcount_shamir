@@ -19,6 +19,10 @@
   This research was supported in part by NSF grants CNS-1111539,
   CNS-1314637, CNS-1526306, CNS-1619454, and CNS-1640548.
 
+  The use of a Shamir secret-sharing-based approach is due to a
+  suggestion by Aaron Johnson (iirc); Carolin Zöbelein did some helpful
+  analysis here.
+
 1. Introduction and scope
 
   PrivCount is a privacy-preserving way to collect aggregate statistics
