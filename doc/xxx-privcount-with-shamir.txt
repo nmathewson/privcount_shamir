@@ -108,8 +108,10 @@
          SEED_i.
 
       3. For every counter j, the client generates a noise value Z_j
-         from an appropriate gaussian distribution, and uses Shamir
-         secret sharing to generate N shares (x,y) of Z, 1 <= x <= N,
+         from an appropriate gaussian distribution. If the noise value is
+         negative, the client adds P to bring Z_j into the range 0...(P-1).
+         The client then uses Shamir
+         secret sharing to generate N shares (x,y) of Z_j, 1 <= x <= N,
          with the x'th share to be used by the x'th Tally Reporter.  See
          Appendix A for more on Shamir secret sharing.  See Appendix B
          for another idea about X coordinates.
@@ -178,6 +180,10 @@
       reconstructed using lagrange polynomial interpolation. (See
       Appendix A).
 
+   6. If the reconstructed sum is greater than P/2, it is probably a negative
+      value. The value can be obtained by subtracting P from the sum.
+      (Negative values are generated when negative noise is added to small
+      signals.)
 
 4. The document format
 
