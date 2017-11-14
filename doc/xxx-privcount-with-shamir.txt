@@ -433,6 +433,60 @@ Appendix C. Safely adding floating-point noise to counters using "snapping"
    modulo P, because it is a simple transform of a noised signal value.
 
 
+Appendix D. Scaling and binning
+
+   Floating-point precision limits sometime require us to scale the noise
+   value by a scaling factor, which is called the "sensitivity" in the context
+   of differential privacy. The sensitivity is an upper bound on the
+   resolution of the signal. (That is, all multiples of the signal must be
+   possible input values. Intermediate values are also permitted.)
+
+   To protect the low bits of signals that are added to scaled noise, we also
+   need to "bin" these signals into multiples of the sensitivity.
+
+   In Mironov's paper, scaled snapping works as follows:
+   (The prodecure in Appendix C assumes a sensitivity of 1.)
+     1. Generate a floating-point noise value at random.
+    *2. Multiply the floating-point noise by the floating-point sensitivity.
+     3. Collect the floating-point signal value.
+     4. Add the floating-point signal to the floating-point noise.
+    *5. Round the noised signal to the nearest multiple of the sensitivity,
+        to remove the lower bits. (These bits of the signal are not protected,
+        because the corresponding bits in the noise are poorly distributed.)
+    *6. Report the rounded noised signal as a differentially private value.
+
+   Therefore, we modify the procedure in Appendix C as follows, to produce an
+   outcome that is not numerically equivalent, but is just as safe:
+     1. Generate a floating-point noise value at random.
+     2. Multiply the floating-point noise by the floating-point sensitivity.
+    *3. Truncate the scaled noise to remove the fractional bits.
+        (These bits can never correspond to signal bits, because PrivCount only
+        collects integer counters.)
+     4. Initialise the integer counter value with the integer noise value.
+     5. Encrypt the counter using a homomorphic scheme.
+    *6. Add a random integer value in -sensitivity/2...sensitivity/2. This
+        destroys the low bits in the signal and noise. It does not introduce
+        bias, and only introduces minimal additional noise. (This is equivalent
+        to rounding the encrypted value to the nearest multiple of the signal,
+        as long as the MASK() value is a uniformly distributed random value.)
+     7. As events arrive, increment the integer counter.
+     8. Send the encrypted counter with partial noise to the Tally Reporters,
+        which then reassemble a noised sum from all Data Collectors.
+    *9. Round the sum to the nearest multiple of the sensitivity, as the
+        remaining precision is meaningless.
+   *10. At the end of a collection, report the rounded sum as a differentially
+        private value.
+
+   This procedure is security-sensitive: changing the order of additions,
+   multiplications, truncations, or rounding can expose the low or high bits
+   of the signal, noise, or MASK() value.
+
+   This analysis is based on section 5.2 of:
+   "On Significance of the Least Significant Bits For Differential Privacy"
+   Ilya Mironov, ACM CCS 2012
+   https://www.microsoft.com/en-us/research/wp-content/uploads/2012/10/lsbs.pdf
+
+
 Appendix Z. Remaining client-side uncertainties
 
    [These are the uncertainties at the client side. I'm not considering
