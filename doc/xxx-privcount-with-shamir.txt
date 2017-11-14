@@ -110,6 +110,8 @@
       3. For every counter j, the client generates a noise value Z_j
          from an appropriate gaussian distribution. If the noise value is
          negative, the client adds P to bring Z_j into the range 0...(P-1).
+         (Adding the noise first implements the safe "snapping" procedure
+         from Appendix C. This is a security-sensitive operation.)
          The client then uses Shamir
          secret sharing to generate N shares (x,y) of Z_j, 1 <= x <= N,
          with the x'th share to be used by the x'th Tally Reporter.  See
@@ -371,6 +373,64 @@ Appendix B. An alternative way to pick X coordinates
    of the public key of the TR?  Everything would still work, so long as
    all users chose the same K value.  It would also let us migrate TR
    sets a little more gracefully.
+
+
+Appendix C. Safely adding floating-point noise to counters using "snapping"
+
+   When we add noise to a counter value (signal), we want the added noise to
+   protect all of the bits in the signal, to ensure differential privacy.
+
+   Because noise values are generated from random double(s) using
+   floating-point calculations, the resulting low bits are not distributed
+   evenly enough to ensure differential privacy.
+
+   To create differentially private noised signal, we need to implement
+   a "snapping" mechanisism. As described by Ilya Mironov, it is:
+     1. Generate a floating-point noise value at random.
+     2. Collect the floating-point signal value.
+     3. Add the floating-point signal to the floating-point noise.
+     4. Round the noised signal to remove the lower bits.
+        (These bits of the signal are not protected, because the corresponding
+        bits in the noise are poorly distributed.)
+     5. Report the rounded noised signal as a differentially private value.
+
+   We implement a variant of this procedure, which produces an outcome that is
+   not numerically equivalent, but is just as safe:
+     1. Generate a floating-point noise value at random.
+    *2. Truncate the noise to remove the fractional bits.
+        (These bits can never correspond to signal bits, because PrivCount only
+        collects integer counters.)
+    *3. Initialise the integer counter value with the integer noise value.
+    *4. Encrypt the counter using a homomorphic scheme.
+    *5. As events arrive, increment the integer counter.
+    *6. Send the encrypted counter with partial noise to the Tally Reporters,
+        which then reassemble a noised sum from all Data Collectors.
+    *7. At the end of a collection, report the counter as a differentially
+        private value.
+
+   This procedure is security-sensitive: changing the order of additions
+   and truncations can expose the low bits of the signal or noise.
+
+   This analysis is based on section 5.2 of:
+   "On Significance of the Least Significant Bits For Differential Privacy"
+   Ilya Mironov, ACM CCS 2012
+   https://www.microsoft.com/en-us/research/wp-content/uploads/2012/10/lsbs.pdf
+
+   Although this analysis applies to laplacian noise, we assume a similar
+   analysis applies to guassian noise. (If we add laplacian noise on DCs,
+   the total ends up with a gaussian distribution anyway.)
+
+   Alternately, we could use a pure-integer transform to create gaussian
+   noise, and avoid floating-point issues entirely. But it is unclear whether a
+   pure-integer gaussian or laplacian noise transform exists, or if such
+   a transform would suffer from any (similar or different) drawbacks when
+   used for differential privacy.
+
+   This analysis also assumes that a clamp() function is available to
+   clamp large signal and noise values to an infinite floating-point value.
+   Instead of clamping, PrivCount's arithmetic wraps modulo P. We believe that
+   this is safe, because any reported values this large will be meaningless
+   modulo P, because it is a simple transform of a noised signal value.
 
 
 Appendix Z. Remaining client-side uncertainties
