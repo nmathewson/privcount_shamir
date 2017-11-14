@@ -292,8 +292,8 @@
       For each counter, the name of the counter, and the obfuscated Y
       coordinate of this TR's share for that counter.  (The Y coordinate
       is calculated as CTR_j+y0 as in 3.1 above.)  The order of counters
-      must correspond to the order used when ; different clients do not
-      need to choose the same order.
+      must correspond to the order used when generating the MASK() values;
+      different clients do not need to choose the same order.
 
 5. Hybrid encryption
 
@@ -396,7 +396,7 @@ Appendix Z. Remaining client-side uncertainties
           support it?
           (it's not safe to report multiple copies of counters)
 
-   How the DCs agree on whose data to collect?
+   How the TRs agree on which DCs' counters to collect?
 
    How data is uploaded to DCs?
 
