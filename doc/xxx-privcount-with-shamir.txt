@@ -23,6 +23,8 @@
   suggestion by Aaron Johnson (iirc); Carolin Zöbelein did some helpful
   analysis here.
 
+  Aaron Johnson and Tim Wilson-Brown made improvements to the draft proposal.
+
 1. Introduction and scope
 
   PrivCount is a privacy-preserving way to collect aggregate statistics
