@@ -114,11 +114,10 @@
          from Appendix C. If the counter value may exceed 2**46 on the client,
          the noise MUST be scaled using the procedure in Appendix E.)
 
-         The client then uses Shamir
-         secret sharing to generate N shares (x,y) of Z_j, 1 <= x <= N,
-         with the x'th share to be used by the x'th Tally Reporter.  See
-         Appendix A for more on Shamir secret sharing.  See Appendix B
-         for another idea about X coordinates.
+         The client then uses Shamir secret sharing to generate
+         N shares (x,y) of Z_j, 1 <= x <= N, with the x'th share to be used by
+         the x'th Tally Reporter.  See Appendix A for more on Shamir secret
+         sharing.  See Appendix B for another idea about X coordinates.
 
          The client picks a random value CTR_j.
 
