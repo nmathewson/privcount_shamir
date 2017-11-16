@@ -78,6 +78,14 @@
   aggregation step multiple times, each time proceeding with a different
   subset of S and taking the median of the resulting values.
 
+  Relay subsets should be chosen at random to avoid relays manipulating their
+  subset membership(s). If an shared random value is required, all relays must
+  submit their results, and then the next revealed shared random value can
+  be used to select relay subsets. (Tor's shared random value can be
+  calculated as soon as all commits have been revealed. So all relay results
+  must be received *before* any votes are cast in the reveal phase for that
+  shared random value.)
+
   Below we describe the algorithm in more detail, and describe the data
   format to use.
 
