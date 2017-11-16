@@ -72,7 +72,7 @@
   values V'.
 
   The use of Shamir secret sharing lets us survive up to N-K crashing TRs.
-  Waiting until the end to agree on a set S of surving relays lets us
+  Waiting until the end to agree on a set S of surviving relays lets us
   survive an arbitrary number of crashing DCs. In order to prevent bogus
   data from corrupting the tally, the Tally Reporters can perform the
   aggregation step multiple times, each time proceeding with a different
@@ -126,7 +126,7 @@
          SEED_i.
 
       3. For every counter c, the client generates a noise value Z_c
-         from an appropriate gaussian distribution. If the noise value is
+         from an appropriate Gaussian distribution. If the noise value is
          negative, the client adds P to bring Z_c into the range 0...(P-1).
          (Adding the noise first implements the safe "snapping" procedure
          from Appendix C. The noise MUST be sampled using the procedure in
@@ -163,8 +163,8 @@
       1. The client publishes, in the format described below:
 
          The list of counters it knows about
-         The final value V of each counter (eacho f which includes the
-         CTR_c value and any increments)
+         The final value V of each counter (which includes the CTR_c value
+         and any increments)
          The list of TRs it knows about
          For each TR:
             For each counter c:
@@ -175,7 +175,7 @@
 3.2. Tally Reporter (TR) side
 
   This section is less completely specified than the Data Collector's
-  behavior: I expect that the TRs will be easier to update as we procede.
+  behavior: I expect that the TRs will be easier to update as we proceed.
 
   (Each TR has a long-term identity key (ed25519).  It also has a
   sequence of short-term curve25519 keys, each associated with a single
@@ -394,7 +394,7 @@ Appendix A. Shamir secret sharing for the impatient
 Appendix B. An alternative way to pick X coordinates
 
    Above we describe a system where everybody knows the same TRs and
-   puts them in the same order, and then does shamir secret sharing
+   puts them in the same order, and then does Shamir secret sharing
    using "x" as the x coordinate for the x'th TR.
 
    But what if we remove that requirement by having x be based on a hash
@@ -413,7 +413,7 @@ Appendix C. Safely adding floating-point noise to counters using "snapping"
    evenly enough to ensure differential privacy.
 
    To create differentially private noised signal, we need to implement
-   a "snapping" mechanisism. As described by Ilya Mironov, it is:
+   a "snapping" mechanism. As described by Ilya Mironov, it is:
      1. Generate a floating-point noise value at random.
      2. Collect the floating-point signal value.
      3. Add the floating-point signal to the floating-point noise.
@@ -426,11 +426,11 @@ Appendix C. Safely adding floating-point noise to counters using "snapping"
    which produces an outcome that is not numerically equivalent, but is just
    as safe:
     *1. Generate a floating-point noise value at random, using the safe
-        prodecure in Appendix D.
+        procedure in Appendix D.
     *2. Truncate the noise to remove the fractional bits.
         (These bits can never correspond to signal bits, because PrivCount only
         collects integer counters.)
-    *3. Initialise the integer counter value with the integer noise value.
+    *3. Initialize the integer counter value with the integer noise value.
     *4. Encrypt shares of the counter using a homomorphic scheme.
     *5. As events arrive, increment the integer counter.
     *6. Send the encrypted counter with partial noise to the Tally Reporters,
@@ -445,13 +445,13 @@ Appendix C. Safely adding floating-point noise to counters using "snapping"
    Ilya Mironov, ACM CCS 2012
    https://www.microsoft.com/en-us/research/wp-content/uploads/2012/10/lsbs.pdf
 
-   Although this analysis applies to laplacian noise, we assume a similar
-   analysis applies to guassian noise. (If we add laplacian noise on DCs,
-   the total ends up with a gaussian distribution anyway.)
+   Although this analysis applies to Laplacian noise, we assume a similar
+   analysis applies to Gaussian noise. (If we add Laplacian noise on DCs,
+   the total ends up with a Gaussian distribution anyway.)
 
-   Alternately, we could use a pure-integer transform to create gaussian
+   Alternately, we could use a pure-integer transform to create Gaussian
    noise, and avoid floating-point issues entirely. But it is unclear whether
-   an efficient pure-integer gaussian or laplacian noise transform exists, or
+   an efficient pure-integer Gaussian or Laplacian noise transform exists, or
    if such a transform would suffer from any (similar or different) drawbacks
    when used for differential privacy.
 
@@ -534,7 +534,7 @@ Appendix E. Scaling large counters
    factor as events are received.
 
    In Mironov's paper, scaled snapping works as follows:
-   (The prodecure in Appendix C assumes a scale of 1.)
+   (The procedure in Appendix C assumes a scale of 1.)
      1. Generate a floating-point noise value at random.
     *2. Multiply the floating-point noise by the floating-point scale.
      3. Collect the floating-point signal value.
@@ -555,7 +555,7 @@ Appendix E. Scaling large counters
      3. Truncate the noise to remove the fractional bits.
         (These bits can never correspond to signal bits, because PrivCount only
         collects integer counters.)
-     4. Initialise the integer counter value with the integer noise value.
+     4. Initialize the integer counter value with the integer noise value.
      5. Encrypt shares of the counter using a homomorphic scheme.
     *6. As events with value V arrive at a counter with scale S,
         increment the counter by the integer part of V / S. Ignore the
