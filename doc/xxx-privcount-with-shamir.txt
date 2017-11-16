@@ -111,8 +111,8 @@
          from an appropriate gaussian distribution. If the noise value is
          negative, the client adds P to bring Z_j into the range 0...(P-1).
          (Adding the noise first implements the safe "snapping" procedure
-         from Appendix C. If the counter value may exceed 2**46 on the client,
-         the noise MUST be scaled using the procedure in Appendix E.)
+         from Appendix C. The noise MUST be sampled using the procedure in
+         Appendix D.)
 
          The client then uses Shamir secret sharing to generate
          N shares (x,y) of Z_j, 1 <= x <= N, with the x'th share to be used by
@@ -136,8 +136,9 @@
          (This step is chosen to be optimal, since it will happen more
          frequently than any other step in the computation.)
 
-         Counter values that may exceed 2**46 on the client MUST be scaled to
-         ensure differential privacy. This uses the procedure in Appendix E.
+         Aggregate counter values that are close to P/2 MUST be scaled to
+         avoid overflow, using the procedure in Appendix E. (We do not think
+         that any counters on the current Tor network will require scaling.)
 
   To publish the counter values:
 
@@ -190,6 +191,9 @@
       value. The value can be obtained by subtracting P from the sum.
       (Negative values are generated when negative noise is added to small
       signals.)
+
+   7. If scaling has been applied, the sum is scaled by the scaling factor.
+      (See Appendix E.)
 
 4. The document format
 
@@ -398,9 +402,11 @@ Appendix C. Safely adding floating-point noise to counters using "snapping"
         bits in the noise are poorly distributed.)
      5. Report the rounded noised signal as a differentially private value.
 
-   We implement a variant of this procedure, which produces an outcome that is
-   not numerically equivalent, but is just as safe:
-     1. Generate a floating-point noise value at random.
+   We specify variant of this procedure that Data Collectors MUST implement,
+   which produces an outcome that is not numerically equivalent, but is just
+   as safe:
+    *1. Generate a floating-point noise value at random, using the safe
+        prodecure in Appendix D.
     *2. Truncate the noise to remove the fractional bits.
         (These bits can never correspond to signal bits, because PrivCount only
         collects integer counters.)
@@ -436,110 +442,109 @@ Appendix C. Safely adding floating-point noise to counters using "snapping"
    modulo P, because it is a simple transform of a noised signal value.
 
 
-Appendix D. Scaling and binning
+Appendix D. Sampling floating-point Gaussian noise for differential privacy
 
-   Floating-point precision limits sometime require us to scale the noise
-   value by a scaling factor, which is called the "sensitivity" in the context
-   of differential privacy. The sensitivity is an upper bound on the
-   resolution of the signal. (That is, all multiples of the signal must be
-   possible input values. Intermediate values are also permitted.)
+   We do not believe that this noise generation procedure will be required
+   for the vast majority of noise samples. For byte counters, 2**46 is
+   64 Terabytes, or the observed bandwidth of a 1 Gbps relay running at full
+   speed for 6 days. It is unlikely that we will ever sample enough noise to
+   protect this much client activity. However, since noise generation is a
+   probabilistic activity, and the mitigation is simple, we specify it below.
 
-   To protect the low bits of signals that are added to scaled noise, we also
-   need to "bin" these signals into multiples of the sensitivity.
+   As implemented in the C "double" type, IEEE 754 double-precision
+   floating-point numbers contain 53 significant bits in their mantissa. This
+   means that noise calculated using doubles can not ensure differential
+   privacy for client activity larger than 2**53:
+     * if the noise is scaled to the magnitude of the signal using
+       multiplication, then the low bits are unprotected,
+     * if the noise is not scaled, then the high bits are unprotected.
 
-   In Mironov's paper, scaled snapping works as follows:
-   (The prodecure in Appendix C assumes a sensitivity of 1.)
-     1. Generate a floating-point noise value at random.
-    *2. Multiply the floating-point noise by the floating-point sensitivity.
-     3. Collect the floating-point signal value.
-     4. Add the floating-point signal to the floating-point noise.
-    *5. Round the noised signal to the nearest multiple of the sensitivity,
-        to remove the lower bits. (These bits of the signal are not protected,
-        because the corresponding bits in the noise are poorly distributed.)
-    *6. Report the rounded noised signal as a differentially private value.
+   But the floating-point transforms in the noise calculation also affect the
+   low bits in the mantissa. So the client activity limit that ensures
+   differential privacy is actually 2**46.
 
-   Therefore, we modify the procedure in Appendix C as follows, to produce an
-   outcome that is not numerically equivalent, but is just as safe:
-     1. Generate a floating-point noise value at random.
-     2. Multiply the floating-point noise by the floating-point sensitivity.
-    *3. Truncate the scaled noise to remove the fractional bits.
+   Therefore, data collectors MUST sample noise as follows:
+     1. Generate a Gaussian floating-point noise value at random with sigma 1.
+     2. Multiply the floating-point noise by the floating-point sigma value.
+     3. Truncate the scaled noise to remove the fractional bits.
         (These bits can never correspond to signal bits, because PrivCount only
         collects integer counters.)
-     4. Initialise the integer counter value with the integer noise value.
-     5. Encrypt the counter using a homomorphic scheme.
-    *6. Add a random integer value in -sensitivity/2...sensitivity/2. This
-        destroys the low bits in the signal and noise. It does not introduce
-        bias, and only introduces minimal additional noise. (This is equivalent
-        to rounding the encrypted value to the nearest multiple of the signal,
-        as long as the MASK() value is a uniformly distributed random value.)
-     7. As events arrive, increment the integer counter.
-     8. Send the encrypted counter with partial noise to the Tally Reporters,
-        which then reassemble a noised sum from all Data Collectors.
-    *9. Round the sum to the nearest multiple of the sensitivity, as the
-        remaining precision is meaningless.
-   *10. At the end of a collection, report the rounded sum as a differentially
-        private value.
+     4. If the scaled noise is greater than or equal to 2**46, replace the
+        unevenly distributed lower bits with a value sampled uniformly at
+        random. This does not introduce bias or additional noise. (In fact,
+        it ensures that the correct amount of noise is being added.)
 
-   This procedure is security-sensitive: changing the order of additions,
-   multiplications, truncations, or rounding can expose the low or high bits
-   of the signal, noise, or MASK() value.
+   Data collectors MUST NOT perform any further multiplications on this value.
+
+   Since this procedure results in the correct amount of Gaussian noise, it
+   preserves the Gaussian distribution in the individual and summed noise
+   values.
+
+   Alternately, this procedure produces a Gaussian distribution because the
+   sum of a sufficient number of uniformly random values is Gaussian, and the
+   sum of multiple high-bit Gaussians with this Gaussian is also Gaussian.
+   (Also, we're only modifying the low bits here, so their actual values are
+   almost certainly insignificant when reported.)
+
+   This procedure is security-sensitive: changing the order of
+   multiplications, truncations, or bit replacements can expose the low or
+   high bits of the signal or noise.
+
+   As long as the noise is sampled using this procedure, the low bits of the
+   signal are protected. So we do not need to "bin" any signals.
 
    This analysis is based on section 5.2 of:
    "On Significance of the Least Significant Bits For Differential Privacy"
    Ilya Mironov, ACM CCS 2012
    https://www.microsoft.com/en-us/research/wp-content/uploads/2012/10/lsbs.pdf
 
+   Alternately, we could round the encrypted value to the nearest multiple of
+   the unprotected bits. But this relies on the MASK() value being a uniformly
+   distributed random value.
 
-Appendix E. Limits on floating-point noise
 
-   As implemented in the C "double" type, IEEE 754 double-precision
-   floating-point numbers contain 53 significant bits in their mantissa. This
-   means that noise calculated using doubles can not ensure differential
-   privacy for signals larger than 2**53:
-     * if the noise is scaled to the magnitude of the signal using
-       multiplication, then the low bits are unprotected,
-     * if the noise is not scaled, then the high bits are unprotected.
+Appendix E. Scaling large counters
 
-   But the floating-point transforms in the noise calculation also affect the
-   low bits in the mantisse. So the limit that ensures differential privacy is
-   actually 2**46. (For byte counters, 2**46 is 64 Terabytes, or the observed
-   bandwidth of a 1 Gbps relay running at full speed for 6 days.)
+   We do not believe that scaling will be necessary to collect PrivCount
+   statistics in Tor. As of November 2017, the Tor network advertises a
+   capacity of 200 Gbps. We can measure approximately 2000 times this amount
+   per day before reaching the P/2 counter limit on the aggregate value.
 
-   Therefore, any counters with a range larger than 0...2**46 MUST be scaled
-   using the procedure in Appendix D, so that the number of significant bits
-   in each Data Collector's count is no larger than 46. We can implement this
-   safely by scaling once the aggregate total for a counter nears 2**46.
+   However, if scaling becomes necessary, we scale each counter by a scaling
+   factor as events are received.
 
-   In addition, any counters with an aggregate total that approaches P MUST be
-   scaled to avoid integer overflow.
-
-   Therefore, we modify the procedure in Appendix D as follows, to produce an
-   outcome that is not numerically equivalent, but is just as safe:
+   In Mironov's paper, scaled snapping works as follows:
+   (The prodecure in Appendix C assumes a scale of 1.)
      1. Generate a floating-point noise value at random.
-     2. Multiply the floating-point noise by the floating-point sensitivity.
-     3. Truncate the scaled noise to remove the fractional bits.
+    *2. Multiply the floating-point noise by the floating-point scale.
+     3. Collect the floating-point signal value.
+     4. Add the floating-point signal to the floating-point noise.
+    *5. Round the noised signal to the nearest multiple of the scale,
+        to remove the lower bits. (These bits of the signal are not protected,
+        because the corresponding bits in the noise are poorly distributed.)
+    *6. Report the rounded noised signal as a differentially private value.
+
+   Therefore, we modify the procedure in Appendix C as follows, to produce an
+   outcome that is not numerically equivalent, but is just as safe:
+   (Data Collectors MAY implement this procedure to handle scaled counters)
+     1. Generate a floating-point noise value at random, using the safe
+        procedure in Appendix D.
+    *2. Divide the noise by the scaling factor.
+        TODO: is this necessary? Or does the sensitivity already account for
+        this? Should we adjust the sensitivity instead?
+     3. Truncate the noise to remove the fractional bits.
         (These bits can never correspond to signal bits, because PrivCount only
         collects integer counters.)
      4. Initialise the integer counter value with the integer noise value.
-     5. Encrypt the counter using a homomorphic scheme.
-     6. Add a random integer value in -sensitivity/2...sensitivity/2. This
-        destroys the low bits in the signal and noise. It does not introduce
-        bias, and only introduces minimal additional noise. (This is equivalent
-        to rounding the encrypted value to the nearest multiple of the signal,
-        as long as the MASK() value is a uniformly distributed random value.)
-    *7. As events with value V arrive at a counter with sensitivity S,
-        increment the counter by the integer part of V / S. Then, increment
-        the counter by 1 with probability (V % S) / S. (This does not
-        introduce bias, and only introduces minimal additional noise.)
-     8. Send the encrypted counter with partial noise to the Tally Reporters,
+     5. Encrypt shares of the counter using a homomorphic scheme.
+    *6. As events with value V arrive at a counter with scale S,
+        increment the counter by the integer part of V / S. Ignore the
+        fractional part V % S, because it is insignificant at these scales.
+        (See below for an explanation and alternatives.)
+     7. Send the encrypted counter with partial noise to the Tally Reporters,
         which then reassemble a noised sum from all Data Collectors.
-    *9. Multiply the sum by the sensitivity.
-   *10. At the end of a collection, report the scaled sum as a differentially
-        private value.
-
-   (The pure floating-point procedure is identical to the one in Appendix D,
-   because floating point operations automatically round low bits (step 7)
-   and automatically scale (steps 9 and 10).)
+    *8. Multiply the sum by the scale factor.
+     9. Report the sum as a differentially private value.
 
    This procedure is security-sensitive: changing the order of additions
    and truncations can expose the low bits of the signal or noise.
@@ -549,20 +554,61 @@ Appendix E. Limits on floating-point noise
    Ilya Mironov, ACM CCS 2012
    https://www.microsoft.com/en-us/research/wp-content/uploads/2012/10/lsbs.pdf
 
-   Alternately, we could argue that we should be conservative, and limit the
-   aggregate total value to 2**46. But if each Data Collector ensures that the
-   low bits of their counters are evenly distributed, then the low bits of the
-   aggregate will be evenly distributed.
 
-   For simplicity, the input scaling factor should be equal to the sensitivity.
-   (Divisors of the sensitivity are also permitted, because they yield evenly
-   distributed values that include all multiples of the sensitivity. But then
-   we would need to distinguish between sensitivities and scaling factors.)
+   E.1. Scaling Factors and Sensitivity
 
-   Instead of the expensive random increment in step 7, the low bits of the
-   signal value can be discarded, and the final total can be adjusted by an
-   unbiasing factor. This only works if the individual event values are large
-   in comparison to the scaling factor.
+   For simplicity, the input scaling factor should be equal to the
+   counter's differential privacy "sensitivity" value. The sensitivity is an
+   upper bound on the resolution of the signal. (That is, all multiples of the
+   signal must be possible input values. Intermediate values are also
+   permitted.)
+
+   Divisors of the sensitivity also permitted, because they yield evenly
+   distributed values that include all multiples of the sensitivity. This
+   allows us to use a default scaling factor of 1, even if the counter has a
+   larger sensitivity.
+
+   For efficiency, the scaling factor should be a power of 2 whenever possible.
+
+
+   E.2. Fractional Scaled Event Values
+
+   We believe it is impossible to have P/2 (~2**63) events on the Tor Network.
+   This means that we can ignore the fractional part of any scaled event
+   value.
+
+   However, if the fractional part is significant, we can account for it in
+   one of these ways:
+
+   The final total can be adjusted by an unbiasing factor, which can be
+   estimated, or calculated using a counter for the low bits. This only works
+   if the individual event values are large in comparison to the scaling
+   factor.
+
+   Alternately, we can account for the fractional part by incrementing
+   the counter by 1 with probability (V % S) / S. (This does not introduce
+   bias, and only introduces minimal additional noise.) However, it is
+   expensive to do this operation per counter share, on every event.
+
+   Alternately, we could keep an unencrypted, unshared accumulator for the low
+   bits of the signal, and only increment the actual counter when it wraps.
+   This is efficient, but it does not hide the low bits of the signal in relay
+   memory. (This is a particular issue on relays in positions that see only a
+   few events for a particular counter.)
+
+   Our best alternative is to keep two counters, one for V / S, and another for
+   V % S. Then we add the counter sums to calculate the final total. Since we
+   know the relationship between these counters, we can treat them as a single
+   counter for the purposes of noise, and add noise as follows:
+     1. Add the standard amount of noise N_1 to the V / S counter
+     2. Add an appropriate, smaller amount of noise N_2 to the V % S counter
+     3. Subtract N_2 from the V / S counter
+   This ensures that the total of the V / S and V % S counters has the correct
+   amount of noise.
+
+   (Ideally, we would collect both counters on a few relays, and use them to
+   estimate an unbiasing factor for the V / S counter.)
+
 
 Appendix Z. Remaining client-side uncertainties
 
