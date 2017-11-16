@@ -40,8 +40,8 @@
   information to explain the Tor side of things.  The actual operation
   of the non-Tor components is trickier than described below.
 
-  In PrivCount, a Data Collector (in this case a Tor relay) shares
-  numeric data with N different Tally Reporters. (A Tally Reporter
+  In PrivCount, a Data Collector (DC, in this case a Tor relay) shares
+  numeric data with N different Tally Reporters (TRs). (A Tally Reporter
   performs the summing and unblinding roles of the Tally Server and Share
   Keeper from experimental PrivCount.)
 
@@ -55,18 +55,26 @@
 
   In brief, the system works as follow:
 
-  To share data, for each counter value V to be shared, the relay first adds
-  Gaussian noise to V in order to produce V', uses Shamir
-  secret-sharing to generate K shares of V' (K<=N), and encrypts each
-  share to a different tally reporter.  Each tally reporters adds all of
-  the shares that it received for each counter, and publishes the total
-  share.  The tally reporters then, collectively, perform secret
-  reconstruction, and learn the sum of all the different V values.
+  To share data, for each counter value V to be shared, the Data Collector
+  first adds Gaussian noise to V in order to produce V', uses (K,N) Shamir
+  secret-sharing to generate N shares of V' (K<=N, K being the
+  reconstruction threshold), encrypts each share to a different Tally
+  Reporter, and sends each encrypted share to the Tally Reporter it
+  is encrypted for.
 
-  In order to prevent bogus data from corrupting the tally, the Tally
-  Reporters can perform this algorithm several times, with different
-  subsets of the data.  The use of Shamir secret sharing lets us
-  survive up to N-K crashing TRs.
+  The Tally Reporters then agree on the set S of Data Collectors that sent
+  data to all of them, and each Tally Reporter forms a share of the aggregate
+  value by decrypting the shares it received from the Data Collectors in S
+  and adding them together. The Tally Reporters then, collectively, perform
+  secret reconstruction, thereby learning the sum of all the different
+  values V'.
+
+  The use of Shamir secret sharing lets us survive up to N-K crashing TRs.
+  Waiting until the end to agree on a set S of surving relays lets us
+  survive an arbitrary number of crashing DCs. In order to prevent bogus
+  data from corrupting the tally, the Tally Reporters can perform the
+  aggregation step multiple times, each time proceeding with a different
+  subset of S and taking the median of the resulting values.
 
   Below we describe the algorithm in more detail, and describe the data
   format to use.
@@ -78,22 +86,22 @@
   field is an upper limit on the largest sum we can calculate; it is not
   a security parameter.
 
-  There are N tally reporters: every participating relay must agree on
+  There are N Tally Reporters: every participating relay must agree on
   which N exist, and on their current public keys.  We suggest listing
   them in the consensus networkstatus document.  All parties must also
-  agree on some ordering the tally reporters.  Similarly, all parties
-  must also agree on some value K<N.
+  agree on some ordering the Tally Reporters.  Similarly, all parties
+  must also agree on some value K<=N.
 
   There are a number of well-known "counters", identified known by ASCII
   identifiers.  Each counter is a value that the participating relays
   will know how to count.  Let C be the number of counters.
 
-3.1. Data collection side
+3.1. Data Collector (DC) side
 
-  At the start of each period, every data collector ("client" below)
+  At the start of each period, every Data Collector ("client" below)
   initializes their state as follows
 
-      1. For every tally reporter with index i, the client constructs a
+      1. For every Tally Reporter with index i, the client constructs a
          random 32-byte random value SEED_i.  The client then generates
          a pseudorandom bitstream of C*B bits using the SHAKE-256
          XOF with SEED_i as its input, and divides this stream into
@@ -107,31 +115,31 @@
          Reporter i, and remembers this encrypted value.  It discards
          SEED_i.
 
-      3. For every counter j, the client generates a noise value Z_j
+      3. For every counter c, the client generates a noise value Z_c
          from an appropriate gaussian distribution. If the noise value is
-         negative, the client adds P to bring Z_j into the range 0...(P-1).
+         negative, the client adds P to bring Z_c into the range 0...(P-1).
          (Adding the noise first implements the safe "snapping" procedure
          from Appendix C. The noise MUST be sampled using the procedure in
          Appendix D.)
 
          The client then uses Shamir secret sharing to generate
-         N shares (x,y) of Z_j, 1 <= x <= N, with the x'th share to be used by
+         N shares (x,y) of Z_c, 1 <= x <= N, with the x'th share to be used by
          the x'th Tally Reporter.  See Appendix A for more on Shamir secret
          sharing.  See Appendix B for another idea about X coordinates.
 
-         The client picks a random value CTR_j.
+         The client picks a random value CTR_c and stores it in the counter,
+         which serves to locally blind the counter.
 
-         The client then subtracts (MASK(x, c)+CTR) from y, giving
-         "encrypted shares" of (x, y0) where y0 = y-MASK(x,c)-CTR.
+         The client then subtracts (MASK(x, c)+CTR_c) from y, giving
+         "encrypted shares" of (x0, y0) where y0 = y-CTR_c.
 
-         The client then discards all MASK values, and all original
-         shares (x,y), and the noise value Z_j. For each counter j, it
-         remembers CTR_j, and N shares of the form (x, y0).
+         The client then discards all MASK values, all CTR values, and all
+         original shares (x,y), all CTR and the noise value Z_c. For each
+         counter c, it remembers CTR_c, and N shares of the form (x, y).
 
   To increment a counter by some value "inc":
 
-      1. The client adds "inc" to the CTR_j value for that counter,
-         modulo P.
+      1. The client adds "inc" to counter value, modulo P.
 
          (This step is chosen to be optimal, since it will happen more
          frequently than any other step in the computation.)
@@ -145,24 +153,26 @@
       1. The client publishes, in the format described below:
 
          The list of counters it knows about
+         The final value V of each counter (eacho f which includes the
+         CTR_c value and any increments)
          The list of TRs it knows about
-         For each TR, encrypted to that TR's public key:
-            For each counter j:
-                A list of (x, CTR_j + y0), for the share (x,y0)
-                corresponding to CTR_j and the TR.
-            SEED_i as encrypted earlier to TR's public key.
+         For each TR:
+            For each counter c:
+                A list of (i, y-CTR_c-MASK(x,c)), which corresponds
+                to the share for the i'th TR of counter c.
+            SEED_i as encrypted earlier to the i'th TR's public key.
 
-3.2. TR side
+3.2. Tally Reporter (TR) side
 
-  This section is less completely specified than the data collector's
+  This section is less completely specified than the Data Collector's
   behavior: I expect that the TRs will be easier to update as we procede.
 
   (Each TR has a long-term identity key (ed25519).  It also has a
   sequence of short-term curve25519 keys, each associated with a single
   round of data collection.)
 
-   1. When a group or TRs receives information from the data collectors,
-      they collectively chose a set of DCs and a set of counters such
+   1. When a group of TRs receives information from the Data Collectors,
+      they collectively chose a set S of DCs and a set of counters such
       that every TR in the group has a valid entry for every counter,
       from every DC in the set.
 
@@ -170,12 +180,12 @@
       have the x coordinate in its shares corresponding to the
       TR's position in the list of TRs.
 
-   2. For each data collector's report, each TR decrypts its part of the
-      client's report using its curve25519 key.  It uses SEED_i and
+   2. For each Data Collector's report, the i'th TR decrypts its part of
+      the client's report using its curve25519 key.  It uses SEED_i and
       SHAKE-256 to regenerate MASK(0) through MASK(C-1).  Then for each
-      share (x, CTR_j + y0), the TR reconstructs the true share for that
-      (client,counter) pair as (x, y_final), where
-      y_final = CTR_j + y0 + MASK(j)).
+      share (x, y-CTR_c-MASK(x,c)) (note that x=i), the TR reconstructs the
+      true share of the value for that DC and counter c by adding
+      V+MASK(x,c) to the y coordinate to yield the share (x, y_final).
 
    3. For every counter in the set, each TR computes the sum of the
       y_final values from all clients.
@@ -184,7 +194,7 @@
       the sum as (x, SUM(y_final)).
 
    5. If at least K TRs publish correctly, then the sum can be
-      reconstructed using lagrange polynomial interpolation. (See
+      reconstructed using Lagrange polynomial interpolation. (See
       Appendix A).
 
    6. If the reconstructed sum is greater than P/2, it is probably a negative
@@ -244,19 +254,19 @@
 
        The curve25519 public key of each Tally Reporter that the relay
        believes in.  (If the list does not match the list of
-       participating tally reporters, they won't be able to find the
+       participating Tally Reporters, they won't be able to find the
        relay's values correctly.)  The identifiers are non-space,
        non-nul character sequences.  The Key values are encoded in
        base64 with padding stripped; they must be unique within each
        counters document.  The Integer values are the X coordinate of
-       the shares associated with each tally-reporter.
+       the shares associated with each Tally Reporter.
 
     "encrypted-to-key" SP Key
 
        [Exactly once]
 
        The curve25519 public key to which the report below is encrypted.
-       Note that it must match one of the tally-reporter options above.
+       Note that it must match one of the Tally Reporter options above.
 
 
     "report" NL
@@ -280,7 +290,7 @@
 
 4.2. The encrypted "shares" document.
 
-  The shares document is send, encrypted, in the "report" element above.
+  The shares document is sent, encrypted, in the "report" element above.
   Its plaintext contents include these fields:
 
    "encrypted-seed" NL
@@ -301,7 +311,7 @@
 
       For each counter, the name of the counter, and the obfuscated Y
       coordinate of this TR's share for that counter.  (The Y coordinate
-      is calculated as CTR_j+y0 as in 3.1 above.)  The order of counters
+      is calculated as y-CTR_c as in 3.1 above.)  The order of counters
       must correspond to the order used when generating the MASK() values;
       different clients do not need to choose the same order.
 
@@ -329,9 +339,9 @@ Appendix A. Shamir secret sharing for the impatient
    reconstruct the original value, but K-1 shares give you no
    information at all.
 
-   The key insight here is that you can reconstruct an K+1-degree
-   polynomial given K distinct points on its curve, but not given
-   K-1 points.
+   The key insight here is that you can reconstruct a K-degree
+   polynomial given K+1 distinct points on its curve, but not given
+   K points.
 
    So, to split a secret, we going to generate a (K-1)-degree
    polynomial.  We'll make the Y intercept of the polynomial be our
@@ -342,7 +352,7 @@ Appendix A. Shamir secret sharing for the impatient
    have N points, any K of which can be used to find the original
    polynomial.
 
-   Moreover, we can do what privcount wants here, because adding the
+   Moreover, we can do what PrivCount wants here, because adding the
    y coordinates of N shares gives us shares of the sum:  If P1 is
    the polynomial made to share secret A and P2 is the polynomial
    made to share secret B, and if (x,y1) is on P1 and (x,y2) is on
