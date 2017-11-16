@@ -405,12 +405,11 @@ Appendix C. Safely adding floating-point noise to counters using "snapping"
         (These bits can never correspond to signal bits, because PrivCount only
         collects integer counters.)
     *3. Initialise the integer counter value with the integer noise value.
-    *4. Encrypt the counter using a homomorphic scheme.
+    *4. Encrypt shares of the counter using a homomorphic scheme.
     *5. As events arrive, increment the integer counter.
     *6. Send the encrypted counter with partial noise to the Tally Reporters,
         which then reassemble a noised sum from all Data Collectors.
-    *7. At the end of a collection, report the counter as a differentially
-        private value.
+    *7. Report the sum as a differentially private value.
 
    This procedure is security-sensitive: changing the order of additions
    and truncations can expose the low bits of the signal or noise.
@@ -425,12 +424,12 @@ Appendix C. Safely adding floating-point noise to counters using "snapping"
    the total ends up with a gaussian distribution anyway.)
 
    Alternately, we could use a pure-integer transform to create gaussian
-   noise, and avoid floating-point issues entirely. But it is unclear whether a
-   pure-integer gaussian or laplacian noise transform exists, or if such
-   a transform would suffer from any (similar or different) drawbacks when
-   used for differential privacy.
+   noise, and avoid floating-point issues entirely. But it is unclear whether
+   an efficient pure-integer gaussian or laplacian noise transform exists, or
+   if such a transform would suffer from any (similar or different) drawbacks
+   when used for differential privacy.
 
-   This analysis also assumes that a clamp() function is available to
+   Mironov's analysis also assumes that a clamp() function is available to
    clamp large signal and noise values to an infinite floating-point value.
    Instead of clamping, PrivCount's arithmetic wraps modulo P. We believe that
    this is safe, because any reported values this large will be meaningless
@@ -542,9 +541,8 @@ Appendix E. Limits on floating-point noise
    because floating point operations automatically round low bits (step 7)
    and automatically scale (steps 9 and 10).)
 
-   This procedure is security-sensitive: changing the order of additions,
-   multiplications, truncations, or rounding can expose the low or high bits
-   of the signal, noise, or MASK() value.
+   This procedure is security-sensitive: changing the order of additions
+   and truncations can expose the low bits of the signal or noise.
 
    This analysis is based on section 5.2 of:
    "On Significance of the Least Significant Bits For Differential Privacy"
