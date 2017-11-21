@@ -139,7 +139,7 @@
          which serves to locally blind the counter.
 
          The client then subtracts (MASK(x, c)+CTR_c) from y, giving
-         "encrypted shares" of (x0, y0) where y0 = y-CTR_c.
+         "encrypted shares" of (x, y0) where y0 = y-CTR_c.
 
          The client then discards all MASK values, all CTR values, and all
          original shares (x,y), all CTR and the noise value Z_c. For each
