@@ -557,5 +557,3 @@ Appendix Z. Remaining client-side uncertainties
    How data is uploaded to DCs?
 
    What to say about persistence on the DC side?
-
-
