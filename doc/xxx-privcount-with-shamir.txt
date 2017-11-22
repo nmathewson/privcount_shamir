@@ -161,8 +161,6 @@
       1. The client publishes, in the format described below:
 
          The list of counters it knows about
-         The final value V of each counter (which includes the CTR_c value
-         and any increments)
          The list of TRs it knows about
          For each TR:
             For each counter c:
