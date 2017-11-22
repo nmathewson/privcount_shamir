@@ -442,18 +442,18 @@ Appendix C. Sampling floating-point Gaussian noise for differential privacy
         (These bits can never correspond to signal bits, because PrivCount only
         collects integer counters.)
      5. If the floating-point sigma value from step 3 is large enough that any
-        noise value could be greater than or equal to 2**46, we need to adjust
-        the low bits of the integer scaled noise value. (This ensures that the
-        low bits of the signal are always hidden by the noise.)
+        noise value could be greater than or equal to 2**46, we need to
+        randomise the low bits of the integer scaled noise value. (This ensures
+        that the low bits of the signal are always hidden by the noise.)
 
         If we use the sample_unit_gaussian() transform in nickm/privcount_nm:
         A. The maximum r value is sqrt(-2.0*ln(2**-53)) ~=  8.57, and the
            maximal sin(theta) values are +/- 1.0. Therefore, the generated
            noise values can be greater than or equal to 2**46 when the sigma
            value is greater than 2**42.
-        B. Therefore, the number of low bits that need to be adjusted is:
+        B. Therefore, the number of low bits that need to be randomised is:
                N = floor(sigma / 2**42)
-        C. We adjust the lowest N bits of the integer noise by replacing them
+        C. We randomise the lowest N bits of the integer noise by replacing them
            with a uniformly distributed N-bit integer value in 0...(2**N)-1.
      6. Add the integer noise to the integer counter, before the counter is
         incremented in response to events. (This ensures that the signal value
@@ -466,9 +466,9 @@ Appendix C. Sampling floating-point Gaussian noise for differential privacy
    As long as the noise is sampled using this procedure, the low bits of the
    signal are protected. So we do not need to "bin" any signals.
 
-   The impact of adjusting more bits than necessary is minor, but if we fail
-   to adjust an unevenly distributed bit, client activity can be exposed.
-   Therefore, we choose to adjust all bits that could potentially be affected
+   The impact of randomising more bits than necessary is minor, but if we fail
+   to randomise an unevenly distributed bit, client activity can be exposed.
+   Therefore, we choose to randomise all bits that could potentially be affected
    by floating-point inaccuracy.
 
    Justification:
@@ -490,8 +490,10 @@ Appendix C. Sampling floating-point Gaussian noise for differential privacy
 
    We believe that this procedure is safe, because we neither round nor smooth
    the noise values. The truncation in step 4 has the same effect as Mironov's
-   "safe snapping" procedure. The adjustment of the low bits removes the
-   2**46 limit on the sigma value.
+   "safe snapping" procedure. Randomising the low bits removes the 2**46 limit
+   on the sigma value, at the cost of departing slightly from the ideal
+   infinite-precision Gaussian distribution. (But we already know that these
+   bits are distributed poorly, due to floating-point inaccuracy.)
 
    Mironov's analysis assumes that a clamp() function is available to clamp
    large signal and noise values to an infinite floating-point value.
