@@ -1,0 +1,17 @@
+[package]
+name = "privcount"
+version = "0.1.0"
+authors = ["Nick Mathewson <nickm@torproject.org>"]
+publish = false
+
+[features]
+nightly = []
+
+[dependencies]
+num = "0.1.40"
+rand = "0.3"
+
+[dev-dependencies]
+quickcheck = "0.4"
+primal = "0.2"
+
