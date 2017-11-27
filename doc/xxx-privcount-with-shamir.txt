@@ -97,9 +97,9 @@ Status: Draft
 3. The algorithm
 
   All values below are B-bit integers modulo some prime P; we suggest
-  B=64 and P = 2**64 - 257 (hex fffffffffffffeff).  The size of this
-  field is an upper limit on the largest sum we can calculate; it is not
-  a security parameter.
+  B=62 and P = 2**62 - 2**30 - 1 (hex 0x3fffffffbfffffff).  The size of
+  this field is an upper limit on the largest sum we can calculate; it
+  is not a security parameter.
 
   There are N Tally Reporters: every participating relay must agree on
   which N exist, and on their current public keys.  We suggest listing
@@ -527,7 +527,7 @@ Appendix D. Scaling large counters
    We do not believe that scaling will be necessary to collect PrivCount
    statistics in Tor. As of November 2017, the Tor network advertises a
    capacity of 200 Gbps, or 2**51 bytes per day. We can measure counters as
-   large as ~2**63 before reaching the P/2 counter limit.
+   large as ~2**61 before reaching the P/2 counter limit.
 
    If scaling becomes necessary, we can scale event values (and noise sigmas)
    by a scaling factor before adding them to the counter. Scaling may introduce
