@@ -1,4 +1,9 @@
-
+Filename: xxx-privcount-with-shamir.txt
+Title: Privacy-Preserving Statistics with Privcount in Tor (Shamir version)
+Author: Nick Mathewson, Tim Wilson-Brown, Aaron Johnson
+Created: 27-Nov-2017
+Supercedes: 280
+Status: Draft
 
 0. Acknowledgments
 
