@@ -32,11 +32,11 @@ const FULL_BITS_MASK : u64 = (1 << N_BITS) - 1;
 
 // Number of bits in a u64 which we don't use.
 const REMAINING_BITS : u64 = 64 - N_BITS;
-// Largest remaining value after we take a u64 and get rid of the
+// Largest remaining value after we take a u64 and shift away the
 // bits that we want to use in our field.
 const MAX_EXCESS : u64 = (1<<REMAINING_BITS) - 1;
 // Largest value to use in our field elements.  This will spill
-// over our regular bit mask by a littke, since we don't store stuff
+// over our regular bit mask by a little, since we don't store stuff
 // in a fully bit-reduced form.
 const FE_VAL_MAX : u64 =
     FULL_BITS_MASK + (MAX_EXCESS << OFFSET_BIT) + MAX_EXCESS;
