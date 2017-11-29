@@ -81,9 +81,16 @@ impl FE {
     pub fn new(v : u64) -> Self {
         FE { val : bit_reduce_once(v) }
     }
-    // Internal use only: requires that v is already bit-reduced.
-    fn new_raw(v : u64) -> Self {
-        FE { val : v }
+    pub fn from_reduced(v : u64) -> Option<Self> {
+        if v < PRIME_ORDER {
+            Some(FE {val : v} )
+        } else {
+            None
+        }
+    }
+    fn new_raw(v : u32) -> Self {
+        // Since v <= u32max, it can't fail
+        FE { val : v as u64 }
     }
     pub fn value(self) -> u64 {
         // self.val is already bit-reduced, so only bit-reduce it once more.
@@ -128,19 +135,20 @@ impl FE {
 // From implementations: these values are always in-range.
 impl From<u8> for FE {
     fn from(v : u8) -> FE {
-        FE::new_raw(v as u64)
+        FE::new_raw(v as u32)
     }
 }
 impl From<u16> for FE {
     fn from(v : u16) -> FE {
-        FE::new_raw(v as u64)
+        FE::new_raw(v as u32)
     }
 }
 impl From<u32> for FE {
     fn from(v : u32) -> FE {
-        FE::new_raw(v as u64)
+        FE::new_raw(v as u32)
     }
 }
+
 impl From<FE> for u64 {
     fn from(v : FE) -> u64 {
         v.value()
@@ -381,8 +389,8 @@ impl Rand for FE {
     fn rand<R: Rng>(rng: &mut R) -> FE {
         loop {
             let v = rng.next_u64() & FULL_BITS_MASK;
-            if v < PRIME_ORDER {
-                return FE::new_raw(v);
+            if let Some(fe) = FE::from_reduced(v) {
+                return fe;
             }
         }
     }
@@ -425,11 +433,7 @@ impl Num for FE {
     fn from_str_radix(s: &str, radix: u32) ->
         Result<Self, &'static str> {
             let u = u64::from_str_radix(s, radix).map_err(|_|"Bad num")?;
-            if u < PRIME_ORDER {
-                Ok(FE::new_raw(u))
-            } else {
-                Err("Too big")
-            }
+            FE::from_reduced(u).ok_or("Too big")
         }
 }
 
@@ -438,10 +442,10 @@ mod tests {
     use math::*;
 
     fn maxrep() -> FE {
-        FE::new_raw(FE_VAL_MAX)
+        FE { val : FE_VAL_MAX }
     }
     fn fullbits() -> FE {
-        FE::new_raw(FULL_BITS_MASK)
+        FE { val : FULL_BITS_MASK }
     }
 
     #[test]
