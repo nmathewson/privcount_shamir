@@ -2,6 +2,8 @@
 
 extern crate num;
 extern crate rand;
+extern crate crypto;
+extern crate byteorder;
 
 #[cfg(test)]
 #[macro_use]
@@ -15,3 +17,4 @@ pub mod shamir;
 pub use math::FE;
 
 //mod client;
+mod encrypt;
