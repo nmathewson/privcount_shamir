@@ -39,7 +39,7 @@ impl<N> ParamBuilder<N>
     //
     // Most shamir implementations don't need to have configurable X
     // coordinates, but they're needed for the kind of homomorphic
-    // shenanegans we have in mind for Privcount.
+    // shenanigans we have in mind for Privcount.
     pub fn add_x_coordinate(&mut self, x : &N) {
         self.p.x_coordinates.push(x.clone());
     }
