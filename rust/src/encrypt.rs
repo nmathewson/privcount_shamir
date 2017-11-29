@@ -115,7 +115,7 @@ pub mod hybrid {
         d.result(result);
     }
 
-    fn curve25519_seckey_gen(rng : &mut Rng) -> [u8;PK_SECRET_LEN] {
+    pub(crate) fn curve25519_seckey_gen(rng : &mut Rng) -> [u8;PK_SECRET_LEN] {
         let mut result = [0;32];
         rng.fill_bytes(&mut result);
         result[0] &= 248;
@@ -147,7 +147,7 @@ pub mod hybrid {
             let (pubkey, rest) = inp.split_at(PK_PUBLIC_LEN);
             let (salt, rest) = rest.split_at(SALT_LEN);
             let (enc, mac_received) = rest.split_at(enc_len);
-            debug_assert!(mac_received.len() == MAC_OUT_LEN);
+            debug_assert_eq!(mac_received.len(), MAC_OUT_LEN);
 
             let shared_key = curve25519(&self.secret_key, pubkey);
             let mut secret_input = Vec::new();
@@ -157,8 +157,8 @@ pub mod hybrid {
             let mut keys = [0 ; S_KEY_LEN + S_IV_LEN + MAC_KEY_LEN];
             generate_keys(&secret_input, tweak, &salt, &mut keys);
             let (enc_key, rest) = keys.split_at(S_KEY_LEN);
-            let (enc_iv, mac_key) = keys.split_at(S_IV_LEN);
-            debug_assert!(mac_key.len() == MAC_KEY_LEN);
+            let (enc_iv, mac_key) = rest.split_at(S_IV_LEN);
+            debug_assert_eq!(mac_key.len(), MAC_KEY_LEN);
 
             let mut mac_computed = [ 0; MAC_OUT_LEN ];
             let mac_covered_portion = &inp[0..inp.len()-MAC_OUT_LEN];
@@ -178,3 +178,30 @@ pub mod hybrid {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use super::hybrid::*;
+    use crypto::curve25519::{curve25519,curve25519_base};
+    use rand::os::OsRng;
+
+    #[test]
+    fn roundtrip() {
+        let msg = b"Why must you record my phonecalls? \
+                    Are you planning a bootleg LP?";
+        let tweak = b"You say you've been threatened by gangsters.";
+        let mut rng = OsRng::new().unwrap();
+        let signing_key = [17;SIGNING_PUBLIC_LEN]; // not actually used to sign
+        let sk = curve25519_seckey_gen(&mut rng);
+        let pk = curve25519_base(&sk);
+        let encryptor = PrivcountEncryptor::new(&pk, &signing_key);
+        let decryptor = PrivcountDecryptor::new(&sk, &signing_key);
+
+        let encrypted = encryptor.encrypt(&msg[..], &tweak[..], &mut rng);
+        let result = decryptor.decrypt(&encrypted, &tweak[..]);
+        let mut expected = Vec::new();
+        expected.extend_from_slice(&msg[..]);
+        assert_eq!(result, Some(expected));
+    }
+
+}
