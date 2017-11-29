@@ -1,5 +1,6 @@
 
 // hybrid encryption with aes and curve25519 and sha3, as documented in
+// rend-spec-v3.txt section 2.5.3 and amended in the privcount-shamir spec.
 
 use rand::Rng;
 
@@ -28,6 +29,8 @@ pub mod hybrid {
     pub const PK_PUBLIC_LEN : usize = 32;
     pub const PK_SECRET_LEN : usize = 32;
     pub const SIGNING_PUBLIC_LEN : usize = 32;
+    pub const ENCRYPTED_OVERHEAD : usize =
+        PK_PUBLIC_LEN + SALT_LEN + MAC_OUT_LEN;
 
     pub struct PrivcountEncryptor {
         key : [u8;PK_PUBLIC_LEN],
@@ -198,6 +201,8 @@ mod tests {
         let decryptor = PrivcountDecryptor::new(&sk, &signing_key);
 
         let encrypted = encryptor.encrypt(&msg[..], &tweak[..], &mut rng);
+        assert_eq!(encrypted.len() - msg.len(), ENCRYPTED_OVERHEAD);
+
         let result = decryptor.decrypt(&encrypted, &tweak[..]);
         let mut expected = Vec::new();
         expected.extend_from_slice(&msg[..]);
@@ -212,6 +217,22 @@ mod tests {
         assert_eq!(result, None);
     }
 
+    #[test]
+    fn is_randomized() {
+        let msg = b"Can't fight corruption with con tricks \
+                    They use the law to commit crime";
+        let tweak = b"I dread to think what the future'll bring \
+                      When we're living in gangster times";
 
+        let mut rng = OsRng::new().unwrap();
+        let signing_key = [62;SIGNING_PUBLIC_LEN]; // not actually used to sign
+        let sk = curve25519_seckey_gen(&mut rng);
+        let pk = curve25519_base(&sk);
+        let encryptor = PrivcountEncryptor::new(&pk, &signing_key);
+
+        let enc1 = encryptor.encrypt(&msg[..], &tweak[..], &mut rng);
+        let enc2 = encryptor.encrypt(&msg[..], &tweak[..], &mut rng);
+        assert_ne!(enc1, enc2);
+    }
 
 }
