@@ -335,7 +335,7 @@ Status: Draft
      We generate a new curve25519 keypair (sk,pk).
 
      We run the algorithm of rend-spec-v3.txt 2.5.3, replacing
-     "secret_input" with Curve25519(sk,PK) | salt | SigningKey, where
+     "secret_input" with Curve25519(sk,PK) | SigningKey, where
      SigningKey is the DC's signing key.  (Including the DC's SigningKey
      here prevents one DC from replaying another one's data.)
 
