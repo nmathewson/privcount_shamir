@@ -448,6 +448,15 @@ impl<'a> Sub<&'a FE> for FE {
         self - *rhs
     }
 }
+
+impl<'a, 'b> Sub<&'b FE> for &'a FE {
+    type Output = FE;
+
+    fn sub(self, rhs: &'b FE) -> FE {
+        *self - *rhs
+    }
+}
+
 impl<'a> Mul<&'a FE> for FE {
     type Output = Self;
     fn mul(self, rhs : &Self) -> FE {

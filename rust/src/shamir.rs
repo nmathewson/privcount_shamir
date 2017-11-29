@@ -3,6 +3,7 @@
 
 use rand::{Rand,Rng};
 use std::iter::FromIterator;
+use std::ops::Sub;
 use num::traits::{NumRef};
 
 // A parambuilder is used to configure the secret-sharing environment.
@@ -99,21 +100,21 @@ impl<N> Params<N>
 
 // Reconstruct a secret from any K of its shares.  (If the number of shares
 // is not the same K used to split the secret, the output will be wrong.)
-pub fn recover_secret<N>(shares : &[Share<N>]) -> N
-    where N : NumRef + Clone
+pub fn recover_secret<'a, N>(shares: &'a [Share<N>]) -> N
+    where &'a N: Sub<&'a N, Output = N>,
+              N: NumRef + 'a,
 {
     let mut accumulator = N::zero();
-    for (i, ref sh) in shares.iter().enumerate() {
+    for (i, sh) in shares.iter().enumerate() {
         let mut numerator = N::one();
         let mut denominator = N::one();
-        for (j, ref sh2) in shares.iter().enumerate() {
+        for (j, sh2) in shares.iter().enumerate() {
             if i == j {
                 continue;
             }
 
             numerator = numerator * &sh2.x;
-            // get rid of this clone somehow.
-            denominator = denominator * (sh2.x.clone() - &sh.x);
+            denominator = denominator * (&sh2.x - &sh.x);
         }
         accumulator = accumulator + (numerator * &sh.y) / denominator;
     }
