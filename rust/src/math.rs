@@ -5,6 +5,7 @@
 // Certain constraints are placed on A and B, see below.
 
 use rand::{Rand,Rng};
+use std;
 use std::cmp::{Eq,PartialEq};
 use std::convert::From;
 use std::fmt::{Display,Formatter,UpperHex,LowerHex,self};
@@ -13,18 +14,44 @@ use std::ops::{AddAssign,SubAssign,MulAssign,DivAssign,RemAssign};
 use num::traits::{Zero,One,Num};
 use std::hash::{Hash,Hasher};
 
-// 2^N_BITS - (2^OFFSET_BIT + 1) must be prime; we do all of our
-//   arithmetic modulo this prime.
-// Choose OFFSET_BIT low, and less than N_BITS/2.
-// Our recip() implementation requires OFFSET_BIT != 2.
-// Choose N_BITS even, and no more than 64 - 2, and no less than 34.
-
+// Here are the constants that determine our prime:
+//
 // number of bits in our field elements
 const N_BITS : u64 = 62;
 // Which bit (other than bit 0) do we clear in our prime?
 const OFFSET_BIT : u64 = 30;
 // order of the prime field
 const PRIME_ORDER : u64 = (1<<N_BITS) - (1<<OFFSET_BIT) - 1;
+
+// There are some constraints on those constants, as described here:
+//
+// 2^N_BITS - (2^OFFSET_BIT + 1) must be prime; we do all of our
+//   arithmetic modulo this prime.
+// Choose OFFSET_BIT low, and less than N_BITS/2.
+// Our recip() implementation requires OFFSET_BIT != 2.
+// Choose N_BITS even, and no more than 64 - 2, and no less than 34.
+
+// READ THIS TO UNDERSTAND:
+//
+//  We represent values mod P in four different u64-based forms.
+//  For every form, the u64 value "v" represents the field element "v % P".
+//
+//  0. Unreduced:  v can be any u64.
+//  1. Bit-reduced once: v is in range 0..FE_VAL_MAX
+//  2. Bit-reduced twice: v is in range 0..FULL_BITS_MASK
+//  3. Fully reduced: v is in range 0..PRIME_ORDER - 1.
+//
+//  The function bit_reduce_once() converts from [0] to [1] and from
+//  [1] to [2].  The function reduce_by_p() converts from [2] to [3].
+//
+//  When we store a value internally in an FE object, we use format [1].
+//  When we expose a value to the caller, or we compare two FEs for equality,
+//  we use format [3].
+//
+//  We accept format [0] for input.
+//
+//  We use formats [0] and [1] for intermediate calculations.
+
 // Mask to mask off all bits that aren't used in the field elements.
 const FULL_BITS_MASK : u64 = (1 << N_BITS) - 1;
 
@@ -78,9 +105,15 @@ fn reduce_by_p(v : u64) -> u64 {
 }
 
 impl FE {
+    // Construct a new FE value.  Accepts any u64, and creates an FE
+    // that represents that value modulo PRIME_ORDER.
     pub fn new(v : u64) -> Self {
+        // This bit_reduce_once ensures that the value is in range
+        // 0..FE_VAL_MAX.
         FE { val : bit_reduce_once(v) }
     }
+    // Construct a new FE value if v is in range 0..PRIME_ORDER-1.
+    // If it is not, return None.
     pub fn from_reduced(v : u64) -> Option<Self> {
         if v < PRIME_ORDER {
             Some(FE {val : v} )
@@ -89,11 +122,15 @@ impl FE {
         }
     }
     fn new_raw(v : u32) -> Self {
-        // Since v <= u32max, it can't fail
+        // Since v <= u32::MAX, we know that it is less than FE_VAL_MAX.
+        debug_assert!((std::u32::MAX as u64) < FE_VAL_MAX);
         FE { val : v as u64 }
     }
+    // Return the value of this FE, as an integer in range 0..PRIME_ORDER-1.
     pub fn value(self) -> u64 {
-        // self.val is already bit-reduced, so only bit-reduce it once more.
+        // self.val is already bit-reduced once, so we only have to
+        // bit-reduce it once more to put it in range 0..FULL_BITS_MASK.
+        // Then, reduce_by_p will put it in range 0..PRIME_ORDER - 1
         reduce_by_p(bit_reduce_once(self.val))
     }
     // Compute the reciprocal of this value.
@@ -180,6 +217,8 @@ impl Add for FE {
 impl Neg for FE {
     type Output = Self;
     fn neg(self) -> Self {
+        // PRIME_ORDER * 2 is less than u64::MAX, since N_BITS <= 62.
+        // FE::new call will bit-reduce the result.
         FE::new(PRIME_ORDER * 2 - self.val)
     }
 }
@@ -256,7 +295,9 @@ impl Mul for FE {
         const MASK : u64 = (1<<HALF_BITS) - 1;
 
         // Reduce the input values an extra time, so that they are in
-        // range 0..FULL_BITS_MASK.
+        // range 0..FULL_BITS_MASK.  This ensures that we can split
+        // each into a high and low set of HALF_BITS-length values,
+        // with no bits left over.
         let a = bit_reduce_once(self.val);
         let b = bit_reduce_once(rhs.val);
 
@@ -330,23 +371,22 @@ impl Mul for FE {
     fn mul(self, rhs : Self) -> Self {
         // If we have u128, we are much happier.
 
-        // Here's our bit-reduction algorithm again:
+        // Here's our bit-reduction algorithm once again, this time
+        // taking a u128 as input.
         fn bit_reduce_once_128(v : u128) -> u128 {
             let low = v & (FULL_BITS_MASK as u128);
             let high = v >> N_BITS;
             low + (high << OFFSET_BIT) + high
         }
 
-        // Reduce the inputs again to make sure they are in range
-        // 0..FULL_BITS_MASK.
-        let a = bit_reduce_once(self.val) as u128;
-        let b = bit_reduce_once(rhs.val) as u128;
+        // This product is is most FE_VAL_MAX^2; FE_VAL_MAX is less
+        // than 2^63, so this value is less than 2^126.  No overflow
+        // here!
+        let product = (self.val as u128) * (rhs.val as u128);
 
-        // The product is is most FULL_BITS_MASK^2, and so is less
-        // than 2^(N_BITS*2).  No overflow here!
-        let product = a * b ;
-
-        // XXXX Is this is too much reduction?  Too little?
+        // The first two bit-reduces are sufficient to make the produce
+        // less than 2^64.  Once we've done that, FE::new can accept it
+        // (and do another bit-reduction).
         let result = bit_reduce_once_128(bit_reduce_once_128(product));
         debug_assert!(result < (1<<64));
         FE::new(result as u64)
