@@ -189,7 +189,7 @@ mod tests {
     fn roundtrip() {
         let msg = b"Why must you record my phonecalls? \
                     Are you planning a bootleg LP?";
-        let tweak = b"You say you've been threatened by gangsters.";
+        let tweak = b"Said you've been threatened by gangsters.";
         let mut rng = OsRng::new().unwrap();
         let signing_key = [17;SIGNING_PUBLIC_LEN]; // not actually used to sign
         let sk = curve25519_seckey_gen(&mut rng);
@@ -202,6 +202,16 @@ mod tests {
         let mut expected = Vec::new();
         expected.extend_from_slice(&msg[..]);
         assert_eq!(result, Some(expected));
+
+        let wrong_tweak = b"Now it's you that's threatening me.";
+        let result = decryptor.decrypt(&encrypted, &wrong_tweak[..]);
+        assert_eq!(result, None);
+
+        let too_short = b"foo";
+        let result = decryptor.decrypt(&too_short[..], &tweak[..]);
+        assert_eq!(result, None);
     }
+
+
 
 }
