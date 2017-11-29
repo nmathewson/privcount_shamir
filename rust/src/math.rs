@@ -240,8 +240,8 @@ impl Mul for FE {
     #[cfg(not(feature = "nightly"))]
     fn mul(self, rhs : Self) -> Self {
         // This is the version of multiplication without u128 support:
-        // we have to a few 32x32 multiplies rather than a full 64x64
-        // multiply.
+        // we have to use a few 32x32 multiplies rather than a full
+        // 64x64 multiply.
 
         // We require below that HALF_BITS <= 31
         const HALF_BITS : u64 = N_BITS / 2;
@@ -464,6 +464,7 @@ mod tests {
         assert_eq!(FE::new(PRIME_ORDER+1).value(), 1);
         assert_eq!(FE::new(PRIME_ORDER-1).value(), PRIME_ORDER - 1);
         assert_eq!(FE::new(PRIME_ORDER).value(), 0);
+        assert_eq!(FE::new(PRIME_ORDER*2).value(), 0);
         assert_eq!(FE::new(!0u64).value(), (!0u64) % PRIME_ORDER);
         assert_eq!(maxrep().value(), FE_VAL_MAX - PRIME_ORDER);
     }
