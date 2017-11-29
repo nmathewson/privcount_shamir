@@ -10,9 +10,8 @@ extern crate quickcheck;
 #[cfg(test)]
 extern crate primal;
 
-
 mod math;
 pub mod shamir;
 pub use math::FE;
 
-mod client;
+//mod client;
