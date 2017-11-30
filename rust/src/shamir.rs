@@ -24,8 +24,8 @@ pub struct Params<N>
 // A Share one of the N split shares of a secret.
 #[derive(Clone,Debug)]
 pub struct Share<N> {
-    x : N,
-    y : N
+    pub x : N,
+    pub y : N
 }
 
 impl<N> ParamBuilder<N>
@@ -78,7 +78,7 @@ impl<N> Params<N>
     // Split a secret 'N' according to the given parameters.
     //
     // (The security of this scheme is only as good as the RNG you use.)
-    pub fn share_secret<R:Rng>(&self, secret: N, rng : &mut R) ->
+    pub fn share_secret<R : Rng>(&self, secret: N, rng : &mut R) ->
         Vec<Share<N>> {
 
         // Generate a random polynomial with Y intercept of secret.
