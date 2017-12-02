@@ -16,5 +16,6 @@ mod math;
 pub mod shamir;
 pub use math::FE;
 
-mod client;
+pub mod data;
+pub mod client;
 mod encrypt;

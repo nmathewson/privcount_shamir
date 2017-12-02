@@ -4,56 +4,33 @@ use std::iter::FromIterator;
 use math::FE;
 use num::Zero;
 use rand::Rng;
+use crypto::sha3;
+use crypto::digest::Digest;
+use byteorder::{ByteOrder, NetworkEndian};
 
+use data::*;
 use encrypt::hybrid::PrivcountEncryptor;
 use encrypt::Encryptor;
 use shamir;
 
-use crypto::sha3;
-use crypto::digest::Digest;
-
-use byteorder::{ByteOrder, NetworkEndian};
-
-#[derive(Debug,Clone,PartialEq,Eq,Hash,Copy)]
-pub struct CtrId(u32);
-
-#[derive(Debug,Clone,PartialEq,Eq,Hash)]
-pub struct TrKeys {
-    enc_key : [u8;32],
-    signing_key : [u8;32]
-}
-
-#[derive(Debug,Clone)]
-pub struct Counter {
-    id : CtrId,
-    val : FE
-}
 
 const SEED_LEN : usize = 32;
+
+pub struct Seed(Vec<u8>);
+
 const SEED_ENCRYPTION_TWEAK : &'static [u8] = b"privctr-seed-v1";
 const Y_ENCRYPTION_TWEAK : &'static [u8] = b"privctr-shares-v1";
 
 // Stuff that we store about, or transmit to, a TR.
-pub struct Seed(Vec<u8>);
 
-pub struct EncryptedSeed(Vec<u8>);
+fn new_seed<R:Rng>(rng : &mut R, keys : &TrKeys) -> (Seed, Vec<u8>) {
+    let mut seed = Vec::new();
+    seed.resize(SEED_LEN, 0);
+    rng.fill_bytes(&mut seed);
 
-impl EncryptedSeed {
-    fn new<R:Rng>(rng : &mut R, keys : &TrKeys) -> (Seed, EncryptedSeed) {
-        let mut seed = Vec::new();
-        seed.resize(SEED_LEN, 0);
-        rng.fill_bytes(&mut seed);
-
-        let enc = PrivcountEncryptor::new(&keys.enc_key, &keys.signing_key);
-        let encrypted = enc.encrypt(&seed, SEED_ENCRYPTION_TWEAK, rng);
-        (Seed(seed), EncryptedSeed(encrypted))
-    }
-}
-
-impl TrKeys {
-    fn get_x_coord(&self) -> FE {
-        FE::new(NetworkEndian::read_u64(&self.signing_key[..8]))
-    }
+    let enc = PrivcountEncryptor::new(&keys.enc_key, &keys.signing_key);
+    let encrypted = enc.encrypt(&seed, SEED_ENCRYPTION_TWEAK, rng);
+    (Seed(seed), encrypted)
 }
 
 impl Seed {
@@ -79,32 +56,25 @@ impl Seed {
     }
 }
 
-pub struct TRData {
+pub struct TrState {
     keys : TrKeys,
-    seed : EncryptedSeed,
-    x : FE,
-    encrypted_counters: Vec<u8>
-}
-
-pub struct TRState {
-    keys : TrKeys,
-    seed : EncryptedSeed,
+    encrypted_seed : Vec<u8>,
     x : FE,
     counters: Vec<FE>,
 }
 
-impl TRState {
+impl TrState {
     fn new<R:Rng>(rng : &mut R, keys : &TrKeys, n_counters : usize) -> Self {
-        let (seed, encrypted_seed) = EncryptedSeed::new(rng, keys);
+        let (seed, encrypted_seed) = new_seed(rng, keys);
         let counters = seed.counter_masks(n_counters);
-        TRState{
+        TrState{
             keys : keys.clone(),
-            seed : encrypted_seed,
+            encrypted_seed : encrypted_seed,
             x : keys.get_x_coord(),
             counters }
     }
 
-    fn finalize<R:Rng>(self, rng : &mut R) -> TRData {
+    fn finalize<R:Rng>(self, rng : &mut R) -> TrData {
 
         let enc = PrivcountEncryptor::new(&self.keys.enc_key,
                                           &self.keys.signing_key);
@@ -115,24 +85,20 @@ impl TRState {
         NetworkEndian::write_u64_into(&u64s, &mut encoded[..]);
         let encrypted = enc.encrypt(&encoded, Y_ENCRYPTION_TWEAK, rng);
 
-        TRData {
-            keys : self.keys,
-            seed : self.seed,
-            x : self.x,
-            encrypted_counters : encrypted
-        }
+        TrData::new(&self.keys, self.encrypted_seed, self.x, encrypted)
     }
 }
 
 pub struct CounterSet {
     counter_ids : Vec<CtrId>, // XXXX use strings??
     counters : HashMap<CtrId, Counter>,
-    tr_states : Vec<TRState>,
+    tr_states : Vec<TrState>,
 }
 
-pub struct CounterData {
-    counter_ids : Vec<CtrId>,
-    tr_data : Vec<TRData>
+#[derive(Debug,Clone)]
+pub struct Counter {
+    id : CtrId,
+    val : FE
 }
 
 impl Counter {
@@ -154,7 +120,7 @@ impl CounterSet {
         let counter_ids = counter_ids.to_vec();
         let n_counters = counter_ids.len();
         let mut tr_states = Vec::from_iter(
-            tr_ids.iter().map(|k| TRState::new(rng, k, n_counters))
+            tr_ids.iter().map(|k| TrState::new(rng, k, n_counters))
         );
 
         let shamir_params = {
@@ -202,7 +168,7 @@ impl CounterSet {
             self.tr_states.into_iter().map(|state| state.finalize(rng))
         );
 
-        CounterData { counter_ids, tr_data }
+        CounterData::new(counter_ids, tr_data)
     }
 }
 
