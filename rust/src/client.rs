@@ -30,8 +30,8 @@ pub struct Counter {
 }
 
 const SEED_LEN : usize = 32;
-const SEED_ENCRYPTION_TWEAK : &'static [u8] = b"";
-const Y_ENCRYPTION_TWEAK : &'static [u8] = b"";
+const SEED_ENCRYPTION_TWEAK : &'static [u8] = b"privctr-seed-v1";
+const Y_ENCRYPTION_TWEAK : &'static [u8] = b"privctr-shares-v1";
 
 // Stuff that we store about, or transmit to, a TR.
 pub struct Seed(Vec<u8>);
