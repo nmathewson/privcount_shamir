@@ -13,14 +13,6 @@ use encrypt::hybrid::PrivcountEncryptor;
 use encrypt::Encryptor;
 use shamir;
 
-
-const SEED_LEN : usize = 32;
-
-pub struct Seed(Vec<u8>);
-
-const SEED_ENCRYPTION_TWEAK : &'static [u8] = b"privctr-seed-v1";
-const Y_ENCRYPTION_TWEAK : &'static [u8] = b"privctr-shares-v1";
-
 // Stuff that we store about, or transmit to, a TR.
 
 fn new_seed<R:Rng>(rng : &mut R, keys : &TrKeys) -> (Seed, Vec<u8>) {
@@ -30,30 +22,7 @@ fn new_seed<R:Rng>(rng : &mut R, keys : &TrKeys) -> (Seed, Vec<u8>) {
 
     let enc = PrivcountEncryptor::new(&keys.enc_key, &keys.signing_key);
     let encrypted = enc.encrypt(&seed, SEED_ENCRYPTION_TWEAK, rng);
-    (Seed(seed), encrypted)
-}
-
-impl Seed {
-    fn counter_masks(self, n_masks : usize) -> Vec<FE> {
-
-        let bytes_needed = n_masks * 8;
-        let mut xof = sha3::Sha3::shake_256();
-        let mut bytes = Vec::new();
-        bytes.resize(bytes_needed, 0);
-        xof.input(&self.0);
-        xof.result(&mut bytes);
-
-        let mut result = Vec::new();
-        let mut slice = &bytes[..];
-        while slice.len() > 0 {
-            let (these, remainder) = slice.split_at(8);
-            // XXXX This makes some values slightly more likely!!!
-            // XXXX spec problem.
-            result.push(FE::new(NetworkEndian::read_u64(these)));
-            slice = remainder;
-        }
-        result
-    }
+    (Seed::from_bytes(&seed).unwrap(), encrypted)
 }
 
 pub struct TrState {
