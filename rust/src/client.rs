@@ -12,7 +12,7 @@ use shamir;
 use crypto::sha3;
 use crypto::digest::Digest;
 
-use byteorder::{ByteOrder, BigEndian as NetworkOrder};
+use byteorder::{ByteOrder, NetworkEndian};
 
 #[derive(Debug,Clone,PartialEq,Eq,Hash,Copy)]
 pub struct CtrId(u32);
@@ -31,6 +31,7 @@ pub struct Counter {
 
 const SEED_LEN : usize = 32;
 const SEED_ENCRYPTION_TWEAK : &'static [u8] = b"";
+const Y_ENCRYPTION_TWEAK : &'static [u8] = b"";
 
 // Stuff that we store about, or transmit to, a TR.
 pub struct Seed(Vec<u8>);
@@ -51,7 +52,7 @@ impl EncryptedSeed {
 
 impl TrKeys {
     fn get_x_coord(&self) -> FE {
-        FE::new(NetworkOrder::read_u64(&self.signing_key[..8]))
+        FE::new(NetworkEndian::read_u64(&self.signing_key[..8]))
     }
 }
 
@@ -71,36 +72,55 @@ impl Seed {
             let (these, remainder) = slice.split_at(8);
             // XXXX This makes some values slightly more likely!!!
             // XXXX spec problem.
-            result.push(FE::new(NetworkOrder::read_u64(these)));
+            result.push(FE::new(NetworkEndian::read_u64(these)));
             slice = remainder;
         }
         result
     }
 }
 
+pub struct TRData {
+    keys : TrKeys,
+    seed : EncryptedSeed,
+    x : FE,
+    encrypted_counters: Vec<u8>
+}
 
-struct TRData {
+pub struct TRState {
     keys : TrKeys,
     seed : EncryptedSeed,
     x : FE,
     counters: Vec<FE>,
 }
 
-pub struct TRState(TRData);
-
 impl TRState {
     fn new<R:Rng>(rng : &mut R, keys : &TrKeys, n_counters : usize) -> Self {
         let (seed, encrypted_seed) = EncryptedSeed::new(rng, keys);
         let counters = seed.counter_masks(n_counters);
-        TRState(
-            TRData { keys : keys.clone(),
-                     seed : encrypted_seed,
-                     x : keys.get_x_coord(),
-                     counters })
+        TRState{
+            keys : keys.clone(),
+            seed : encrypted_seed,
+            x : keys.get_x_coord(),
+            counters }
     }
 
-    fn extract_data(self) -> TRData {
-        self.0
+    fn finalize<R:Rng>(self, rng : &mut R) -> TRData {
+
+        let enc = PrivcountEncryptor::new(&self.keys.enc_key,
+                                          &self.keys.signing_key);
+        let u64s = Vec::from_iter(
+            self.counters.into_iter().map(|fe| fe.value()));
+        let mut encoded = Vec::with_capacity(u64s.len() * 8);
+        encoded.resize(u64s.len() * 8, 0);
+        NetworkEndian::write_u64_into(&u64s, &mut encoded[..]);
+        let encrypted = enc.encrypt(&encoded, Y_ENCRYPTION_TWEAK, rng);
+
+        TRData {
+            keys : self.keys,
+            seed : self.seed,
+            x : self.x,
+            encrypted_counters : encrypted
+        }
     }
 }
 
@@ -140,7 +160,7 @@ impl CounterSet {
         let shamir_params = {
             let mut b = shamir::ParamBuilder::new(k, tr_ids.len());
             for state in tr_states.iter() {
-                b.add_x_coordinate(&state.0.x);
+                b.add_x_coordinate(&state.x);
             }
             b.finalize().unwrap()
         };
@@ -154,9 +174,9 @@ impl CounterSet {
             counter.val = rng.gen();
 
             for (share, tr_state) in shares.iter().zip(tr_states.iter_mut()) {
-                assert_eq!(share.x, tr_state.0.x);
-                let mask = tr_state.0.counters[idx];
-                tr_state.0.counters[idx] = share.y - mask - counter.val;
+                assert_eq!(share.x, tr_state.x);
+                let mask = tr_state.counters[idx];
+                tr_state.counters[idx] = share.y - mask - counter.val;
             }
             counters.insert(*cid, counter);
         }
@@ -168,18 +188,19 @@ impl CounterSet {
         self.counters.get_mut(&ctr_id)
     }
 
-    pub fn finalize(self) -> CounterData {
+    pub fn finalize<R : Rng>(mut self, rng : &mut R) -> CounterData {
         let counter_ids = self.counter_ids;
-        let mut tr_data = Vec::from_iter(
-            self.tr_states.into_iter().map(|state| state.0)
-        );
 
         for (idx, cid) in counter_ids.iter().enumerate() {
             let counter = self.counters.get(cid).unwrap();
-            for trd in tr_data.iter_mut() {
-                trd.counters[idx] += counter.val;
+            for trs in self.tr_states.iter_mut() {
+                trs.counters[idx] += counter.val;
             }
         }
+
+        let tr_data = Vec::from_iter(
+            self.tr_states.into_iter().map(|state| state.finalize(rng))
+        );
 
         CounterData { counter_ids, tr_data }
     }
