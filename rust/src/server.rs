@@ -16,8 +16,8 @@ pub struct ClientData {
 }
 
 pub struct ServerKeys {
-    enc_secret : [u8;32],
-    public : TrKeys,
+    pub enc_secret : [u8;32],
+    pub public : TrKeys,
 }
 
 impl ServerKeys {

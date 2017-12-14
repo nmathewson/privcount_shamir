@@ -19,4 +19,4 @@ pub use math::FE;
 pub mod data;
 pub mod client;
 pub mod server;
-mod encrypt;
+pub mod encrypt;
