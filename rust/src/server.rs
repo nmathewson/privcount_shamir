@@ -45,7 +45,7 @@ impl ServerKeys {
         let seed = Seed::from_bytes(&seedval)
             .ok_or("Bad seed")?;
         let masks = seed.counter_masks(counters.len());
-        if ctrs.len() * 8 != masks.len() {
+        if ctrs.len() != masks.len() * 8 {
             return Err("Wrong number of counters.");
         }
         let mut u64s = Vec::with_capacity(masks.len());
