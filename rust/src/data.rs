@@ -5,7 +5,7 @@ use crypto::digest::Digest;
 
 use math::FE;
 #[derive(Debug,Clone,PartialEq,Eq,Hash,Copy)]
-pub struct CtrId(u32);
+pub struct CtrId(pub u32);
 
 #[derive(Debug,Clone,PartialEq,Eq,Hash)]
 pub struct ClientKey {
