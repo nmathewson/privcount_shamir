@@ -13,6 +13,18 @@ pub trait Decryptor {
     fn decrypt(&self, inp : &[u8], tweak : &[u8]) -> Option<Vec<u8>>;
 }
 
+pub mod keygen {
+    use rand::Rng;
+    pub fn curve25519_seckey_gen(rng : &mut Rng) -> [u8;32] {
+        let mut result = [0;32];
+        rng.fill_bytes(&mut result);
+        result[0] &= 248;
+        result[31] &= 127;
+        result[31] |= 64;
+        result
+    }
+}
+
 pub mod hybrid {
     use crypto::sha3;
     use crypto::aes;
@@ -53,7 +65,7 @@ pub mod hybrid {
                    inp : &[u8], tweak : &[u8], rng : &mut Rng) -> Vec<u8> {
             let mut keys = [0 ; S_KEY_LEN + S_IV_LEN + MAC_KEY_LEN];
 
-            let seckey_tmp = curve25519_seckey_gen(rng);
+            let seckey_tmp = super::keygen::curve25519_seckey_gen(rng);
             let pubkey_tmp = curve25519_base(&seckey_tmp);
 
             let shared_key = curve25519(&seckey_tmp, &self.key);
@@ -116,15 +128,6 @@ pub mod hybrid {
         d.input(key);
         d.input(val);
         d.result(result);
-    }
-
-    pub(crate) fn curve25519_seckey_gen(rng : &mut Rng) -> [u8;PK_SECRET_LEN] {
-        let mut result = [0;32];
-        rng.fill_bytes(&mut result);
-        result[0] &= 248;
-        result[31] &= 127;
-        result[31] |= 64;
-        result
     }
 
     pub struct PrivcountDecryptor {
@@ -195,7 +198,7 @@ mod tests {
         let tweak = b"Said you've been threatened by gangsters.";
         let mut rng = OsRng::new().unwrap();
         let signing_key = [17;SIGNING_PUBLIC_LEN]; // not actually used to sign
-        let sk = curve25519_seckey_gen(&mut rng);
+        let sk = super::keygen::curve25519_seckey_gen(&mut rng);
         let pk = curve25519_base(&sk);
         let encryptor = PrivcountEncryptor::new(&pk, &signing_key);
         let decryptor = PrivcountDecryptor::new(&sk, &signing_key);
@@ -226,7 +229,7 @@ mod tests {
 
         let mut rng = OsRng::new().unwrap();
         let signing_key = [62;SIGNING_PUBLIC_LEN]; // not actually used to sign
-        let sk = curve25519_seckey_gen(&mut rng);
+        let sk = super::keygen::curve25519_seckey_gen(&mut rng);
         let pk = curve25519_base(&sk);
         let encryptor = PrivcountEncryptor::new(&pk, &signing_key);
 
