@@ -119,6 +119,10 @@ impl FE {
     // The implementation should try to return a non-None value for
     // the majority of inputs.
     pub fn from_u64_unbiased(v : u64) -> Option<Self> {
+        // We first mask out the high bits of v, and then return a value
+        // only when the masked value is less than PRIME_ORDER.  This
+        // will be the case with probability = PRIME_ORDER / (1<<N_BITS),
+        // = 1 - 2^-32 - 1^-62.
         FE::from_reduced(v & FULL_BITS_MASK)
     }
     // Construct a new FE value if v is in range 0..PRIME_ORDER-1.
@@ -585,6 +589,28 @@ mod tests {
         assert_eq!(FE::new(999).recip() * FE::new(999), FE::new(1));
         assert_eq!(FE::new(999).recip(), FE::new(2885188949795824624));
         assert_eq!(FE::new(999), FE::new(2885188949795824624).recip());
+    }
+    #[test]
+    fn construct_maybe() {
+        assert_eq!(FE::from_reduced(12345), Some(FE::new(12345)));
+        assert_eq!(FE::from_reduced(PRIME_ORDER-1),
+                   Some(FE::new(PRIME_ORDER-1)));
+        assert_eq!(FE::from_reduced(PRIME_ORDER), None);
+        assert_eq!(FE::from_reduced(PRIME_ORDER*2), None);
+
+        assert_eq!(FE::from_u64_unbiased(12345), Some(FE::new(12345)));
+        let hibit = 1<<N_BITS;
+        assert_eq!(FE::from_u64_unbiased(12345 + hibit),
+                   Some(FE::new(12345)));
+        assert_eq!(FE::from_u64_unbiased(PRIME_ORDER-1),
+                   Some(FE::new(PRIME_ORDER-1)));
+        assert_eq!(FE::from_u64_unbiased(PRIME_ORDER), None);
+        assert_eq!(FE::from_u64_unbiased(PRIME_ORDER - 1 + hibit),
+                   Some(FE::new(PRIME_ORDER - 1)));
+        assert_eq!(FE::from_u64_unbiased(PRIME_ORDER - 1 + hibit*2),
+                   Some(FE::new(PRIME_ORDER - 1)));
+        assert_eq!(FE::from_u64_unbiased(PRIME_ORDER + hibit), None);
+        assert_eq!(FE::from_u64_unbiased(PRIME_ORDER + hibit * 2), None);
     }
 
     fn mul_slow(a : FE, b : FE) -> FE {
