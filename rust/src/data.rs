@@ -69,8 +69,13 @@ impl Seed {
         }
     }
     pub fn counter_masks(self, n_masks : usize) -> Vec<FE> {
+        const EXTRA_MASKS : usize = 4;
+        const EXTRA_BYTES_PER_MASK : usize = 1;
 
-        let bytes_needed = n_masks * 8;
+        // With very high probability, this is more data than we need.
+        let bytes_needed = (n_masks + EXTRA_MASKS) *
+            (8 + EXTRA_BYTES_PER_MASK);
+
         let mut xof = sha3::Sha3::shake_256();
         let mut bytes = Vec::new();
         bytes.resize(bytes_needed, 0);
@@ -81,9 +86,10 @@ impl Seed {
         let mut slice = &bytes[..];
         while slice.len() > 0 {
             let (these, remainder) = slice.split_at(8);
-            // XXXX This makes some values slightly more likely!!!
-            // XXXX spec problem.
-            result.push(FE::new(NetworkEndian::read_u64(these)));
+            let v64 = NetworkEndian::read_u64(these);
+            if let Some(elt) = FE::from_u64_unbiased(v64) {
+                result.push(elt)
+            }
             slice = remainder;
         }
         result

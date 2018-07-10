@@ -112,6 +112,15 @@ impl FE {
         // 0..FE_VAL_MAX.
         FE { val : bit_reduce_once(v) }
     }
+    // Construct a new FE value from a u64 value, such that if the
+    // inputs to this function are uniform random u64s, then all of the
+    // non-None outputs of this function are uniform random FEs.
+    //
+    // The implementation should try to return a non-None value for
+    // the majority of inputs.
+    pub fn from_u64_unbiased(v : u64) -> Option<Self> {
+        FE::from_reduced(v & FULL_BITS_MASK)
+    }
     // Construct a new FE value if v is in range 0..PRIME_ORDER-1.
     // If it is not, return None.
     pub fn from_reduced(v : u64) -> Option<Self> {
