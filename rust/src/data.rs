@@ -84,7 +84,7 @@ impl Seed {
 
         let mut result = Vec::new();
         let mut slice = &bytes[..];
-        while slice.len() > 0 {
+        while result.len() < n_masks {
             let (these, remainder) = slice.split_at(8);
             let v64 = NetworkEndian::read_u64(these);
             if let Some(elt) = FE::from_u64_unbiased(v64) {
