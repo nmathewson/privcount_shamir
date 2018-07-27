@@ -9,10 +9,14 @@ rust:
 
 os:
   - linux
-  #- osx
+  - osx
 
-## (Linux only) Use the Ubuntu Trusty images
+## (Linux only) Use the latest Linux image (Ubuntu Trusty)
 dist: trusty
+
+## (OS X only) Use the default OS X image
+## See https://docs.travis-ci.com/user/reference/osx#os-x-version
+#osx_image: xcode8.3
 
 matrix:
   allow_failures:
