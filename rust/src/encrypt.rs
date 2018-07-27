@@ -194,7 +194,7 @@ pub mod hybrid {
 mod tests {
     use super::hybrid::*;
     use super::*;
-    use crypto::curve25519::{curve25519, curve25519_base};
+    use crypto::curve25519::curve25519_base;
     use rand::os::OsRng;
 
     #[test]

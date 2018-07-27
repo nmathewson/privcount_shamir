@@ -7,7 +7,6 @@ use data::*;
 use encrypt::hybrid::PrivcountDecryptor;
 use encrypt::Decryptor;
 use math::FE;
-use shamir;
 
 // The data a TR recovers from a single client
 pub struct ClientData {
