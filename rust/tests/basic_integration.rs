@@ -85,7 +85,7 @@ fn test_combination(
 
             all_my_client_data.push(decoded);
         }
-        let my_shares = server::SumShares(&all_my_client_data);
+        let my_shares = server::sum_shares(&all_my_client_data);
         shares.push((my_keys.public.get_x_coord(), my_shares));
     }
 

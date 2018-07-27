@@ -75,7 +75,7 @@ impl ServerKeys {
     }
 }
 
-pub fn SumShares(client_data: &[ClientData]) -> HashMap<CtrId, FE> {
+pub fn sum_shares(client_data: &[ClientData]) -> HashMap<CtrId, FE> {
     let mut result = HashMap::new();
 
     for cd in client_data.iter() {
