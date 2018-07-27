@@ -2,8 +2,6 @@ use std::collections::HashMap;
 use std::iter::FromIterator;
 
 use byteorder::{ByteOrder, NetworkEndian};
-use crypto::digest::Digest;
-use crypto::sha3;
 use math::FE;
 use num::Zero;
 use rand::Rng;
