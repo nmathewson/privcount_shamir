@@ -4,24 +4,24 @@
 //
 // Certain constraints are placed on A and B, see below.
 
-use rand::{Rand,Rng};
+use num::traits::{Num, One, Zero};
+use rand::{Rand, Rng};
 use std;
-use std::cmp::{Eq,PartialEq};
+use std::cmp::{Eq, PartialEq};
 use std::convert::From;
-use std::fmt::{Display,Formatter,UpperHex,LowerHex,self};
-use std::ops::{Add,Sub,Neg,Mul,Div,Rem};
-use std::ops::{AddAssign,SubAssign,MulAssign,DivAssign,RemAssign};
-use num::traits::{Zero,One,Num};
-use std::hash::{Hash,Hasher};
+use std::fmt::{self, Display, Formatter, LowerHex, UpperHex};
+use std::hash::{Hash, Hasher};
+use std::ops::{Add, Div, Mul, Neg, Rem, Sub};
+use std::ops::{AddAssign, DivAssign, MulAssign, RemAssign, SubAssign};
 
 // Here are the constants that determine our prime:
 //
 // number of bits in our field elements
-const N_BITS : u64 = 62;
+const N_BITS: u64 = 62;
 // Which bit (other than bit 0) do we clear in our prime?
-const OFFSET_BIT : u64 = 30;
+const OFFSET_BIT: u64 = 30;
 // order of the prime field
-const PRIME_ORDER : u64 = (1<<N_BITS) - (1<<OFFSET_BIT) - 1;
+const PRIME_ORDER: u64 = (1 << N_BITS) - (1 << OFFSET_BIT) - 1;
 
 // There are some constraints on those constants, as described here:
 //
@@ -53,34 +53,34 @@ const PRIME_ORDER : u64 = (1<<N_BITS) - (1<<OFFSET_BIT) - 1;
 //  We use formats [0] and [1] for intermediate calculations.
 
 // Mask to mask off all bits that aren't used in the field elements.
-const FULL_BITS_MASK : u64 = (1 << N_BITS) - 1;
+const FULL_BITS_MASK: u64 = (1 << N_BITS) - 1;
 
 // We use these macros to check invariants.
 
 // Number of bits in a u64 which we don't use.
-const REMAINING_BITS : u64 = 64 - N_BITS;
+const REMAINING_BITS: u64 = 64 - N_BITS;
 // Largest remaining value after we take a u64 and shift away the
 // bits that we want to use in our field.
-const MAX_EXCESS : u64 = (1<<REMAINING_BITS) - 1;
+const MAX_EXCESS: u64 = (1 << REMAINING_BITS) - 1;
 // Largest value to use in our field elements.  This will spill
 // over our regular bit mask by a little, since we don't store stuff
 // in a fully bit-reduced form.
-const FE_VAL_MAX : u64 =
+const FE_VAL_MAX: u64 =
     FULL_BITS_MASK + (MAX_EXCESS << OFFSET_BIT) + MAX_EXCESS;
 
-#[derive(Debug,Copy,Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct FE {
     // This value is stored in a bit-reduced form: it will be in range
     // 0..FE_VAL_MAX.  It is equivalent modulo PRIME_ORDER to the
     // actual value of this field element
-    val : u64
+    val: u64,
 }
 
 // Given a value in range 0..U64_MAX, returns a value in range 0..FE_VAL_MAX.
 //
 // (Given a value in range 0..FE_VAL_MAX, the output is in range
 // 0..FULL_BITS_MASK.)
-fn bit_reduce_once(v : u64) -> u64 {
+fn bit_reduce_once(v: u64) -> u64 {
     // Excess is in range 0..MAX_EXCESS
     let excess = v >> N_BITS;
     // Lowpart is in range 0..FULL_BITS_MASK
@@ -94,23 +94,24 @@ fn bit_reduce_once(v : u64) -> u64 {
 // Returns "if v > PRIME_ORDER { v - PRIME_ORDER } else { v }".
 //
 // We only call this when it will produce a value in range 0..PRIME_ORDER-1.
-fn reduce_by_p(v : u64) -> u64 {
+fn reduce_by_p(v: u64) -> u64 {
     debug_assert!(v < PRIME_ORDER * 2);
     let difference = v.wrapping_sub(PRIME_ORDER);
-    let overflow_bit = difference & (1<<63);
-    let mask =
-        ( (overflow_bit as i64) >> 63 ) as u64;
+    let overflow_bit = difference & (1 << 63);
+    let mask = ((overflow_bit as i64) >> 63) as u64;
 
-    (mask & v ) | ((!mask) & difference)
+    (mask & v) | ((!mask) & difference)
 }
 
 impl FE {
     // Construct a new FE value.  Accepts any u64, and creates an FE
     // that represents that value modulo PRIME_ORDER.
-    pub fn new(v : u64) -> Self {
+    pub fn new(v: u64) -> Self {
         // This bit_reduce_once ensures that the value is in range
         // 0..FE_VAL_MAX.
-        FE { val : bit_reduce_once(v) }
+        FE {
+            val: bit_reduce_once(v),
+        }
     }
     // Construct a new FE value from a u64 value, such that if the
     // inputs to this function are uniform random u64s, then all of the
@@ -118,7 +119,7 @@ impl FE {
     //
     // The implementation should try to return a non-None value for
     // the majority of inputs.
-    pub fn from_u64_unbiased(v : u64) -> Option<Self> {
+    pub fn from_u64_unbiased(v: u64) -> Option<Self> {
         // We first mask out the high bits of v, and then return a value
         // only when the masked value is less than PRIME_ORDER.  This
         // will be the case with probability = PRIME_ORDER / (1<<N_BITS),
@@ -127,17 +128,17 @@ impl FE {
     }
     // Construct a new FE value if v is in range 0..PRIME_ORDER-1.
     // If it is not, return None.
-    pub fn from_reduced(v : u64) -> Option<Self> {
+    pub fn from_reduced(v: u64) -> Option<Self> {
         if v < PRIME_ORDER {
-            Some(FE {val : v} )
+            Some(FE { val: v })
         } else {
             None
         }
     }
-    fn new_raw(v : u32) -> Self {
+    fn new_raw(v: u32) -> Self {
         // Since v <= u32::MAX, we know that it is less than FE_VAL_MAX.
         debug_assert!((std::u32::MAX as u64) < FE_VAL_MAX);
-        FE { val : v as u64 }
+        FE { val: v as u64 }
     }
     // Return the value of this FE, as an integer in range 0..PRIME_ORDER-1.
     pub fn value(self) -> u64 {
@@ -174,7 +175,7 @@ impl FE {
         // OFFSET_BIT is clear
         x = x * x;
         // OFFSET_BIT + 1 through N_BITS-2
-        for _ in (OFFSET_BIT+1)..(N_BITS-1) {
+        for _ in (OFFSET_BIT + 1)..(N_BITS - 1) {
             y = x * y;
             x = x * x;
         }
@@ -184,23 +185,23 @@ impl FE {
 
 // From implementations: these values are always in-range.
 impl From<u8> for FE {
-    fn from(v : u8) -> FE {
+    fn from(v: u8) -> FE {
         FE::new_raw(v as u32)
     }
 }
 impl From<u16> for FE {
-    fn from(v : u16) -> FE {
+    fn from(v: u16) -> FE {
         FE::new_raw(v as u32)
     }
 }
 impl From<u32> for FE {
-    fn from(v : u32) -> FE {
+    fn from(v: u32) -> FE {
         FE::new_raw(v as u32)
     }
 }
 
 impl From<FE> for u64 {
-    fn from(v : FE) -> u64 {
+    fn from(v: FE) -> u64 {
         v.value()
     }
 }
@@ -220,7 +221,7 @@ impl One for FE {
 
 impl Add for FE {
     type Output = Self;
-    fn add(self, rhs : Self) -> Self {
+    fn add(self, rhs: Self) -> Self {
         // This sum stay in range, since FE_MAX_VAL * 2 < U64_MAX.
         // The FE::new call will bit-reduce the result.
         FE::new(self.val + rhs.val)
@@ -238,31 +239,31 @@ impl Neg for FE {
 
 impl Sub for FE {
     type Output = Self;
-    fn sub(self, rhs : Self) -> Self {
+    fn sub(self, rhs: Self) -> Self {
         self + (-rhs)
     }
 }
 
 impl PartialEq for FE {
-    fn eq(&self, rhs : &Self) -> bool {
+    fn eq(&self, rhs: &Self) -> bool {
         self.value() == rhs.value()
     }
 }
-impl Eq for FE { }
+impl Eq for FE {}
 
 impl Hash for FE {
-    fn hash<H:Hasher>(&self,hasher : &mut H) {
+    fn hash<H: Hasher>(&self, hasher: &mut H) {
         hasher.write_u64(self.value())
     }
 }
 
 impl AddAssign for FE {
-    fn add_assign(&mut self, other : Self) {
+    fn add_assign(&mut self, other: Self) {
         *self = *self + other;
     }
 }
 impl SubAssign for FE {
-    fn sub_assign(&mut self, other : Self) {
+    fn sub_assign(&mut self, other: Self) {
         *self = *self - other;
     }
 }
@@ -298,14 +299,14 @@ impl Mul for FE {
     // depending on whether we have u128 support or not.
 
     #[cfg(not(feature = "nightly"))]
-    fn mul(self, rhs : Self) -> Self {
+    fn mul(self, rhs: Self) -> Self {
         // This is the version of multiplication without u128 support:
         // we have to use a few 32x32 multiplies rather than a full
         // 64x64 multiply.
 
         // We require below that HALF_BITS <= 31
-        const HALF_BITS : u64 = N_BITS / 2;
-        const MASK : u64 = (1<<HALF_BITS) - 1;
+        const HALF_BITS: u64 = N_BITS / 2;
+        const MASK: u64 = (1 << HALF_BITS) - 1;
 
         // Reduce the input values an extra time, so that they are in
         // range 0..FULL_BITS_MASK.  This ensures that we can split
@@ -368,25 +369,25 @@ impl Mul for FE {
         // Computing product_hi << OFFSET_BIT could overflow, so we're
         // splitting it again.
 
-        const NB : u64 = N_BITS - OFFSET_BIT;
-        let product_hi_lo = product_hi & ((1<<NB)-1);
+        const NB: u64 = N_BITS - OFFSET_BIT;
+        let product_hi_lo = product_hi & ((1 << NB) - 1);
         let product_hi_hi = product_hi >> NB;
 
         // There are some redundant reductions here, maybe? XXXX
-        FE::new(product_low) +
-            FE::new(product_hi) +
-            FE::new(product_hi_lo << OFFSET_BIT) +
-            FE::new(product_hi_hi) +
-            FE::new(product_hi_hi << OFFSET_BIT)
+        FE::new(product_low)
+            + FE::new(product_hi)
+            + FE::new(product_hi_lo << OFFSET_BIT)
+            + FE::new(product_hi_hi)
+            + FE::new(product_hi_hi << OFFSET_BIT)
     }
 
     #[cfg(feature = "nightly")]
-    fn mul(self, rhs : Self) -> Self {
+    fn mul(self, rhs: Self) -> Self {
         // If we have u128, we are much happier.
 
         // Here's our bit-reduction algorithm once again, this time
         // taking a u128 as input.
-        fn bit_reduce_once_128(v : u128) -> u128 {
+        fn bit_reduce_once_128(v: u128) -> u128 {
             let low = v & (FULL_BITS_MASK as u128);
             let high = v >> N_BITS;
             low + (high << OFFSET_BIT) + high
@@ -401,14 +402,14 @@ impl Mul for FE {
         // less than 2^64.  Once we've done that, FE::new can accept it
         // (and do another bit-reduction).
         let result = bit_reduce_once_128(bit_reduce_once_128(product));
-        debug_assert!(result < (1<<64));
+        debug_assert!(result < (1 << 64));
         FE::new(result as u64)
     }
 }
 
 impl Div for FE {
     type Output = Self;
-    fn div(self, rhs : Self) -> Self {
+    fn div(self, rhs: Self) -> Self {
         self * rhs.recip()
     }
 }
@@ -417,23 +418,23 @@ impl Rem for FE {
     type Output = Self;
     // not sure why you would want this.... XXXX
     // .... but it makes the Num trait work out.
-    fn rem(self, rhs : Self) -> Self {
-        self - ( self / rhs )
+    fn rem(self, rhs: Self) -> Self {
+        self - (self / rhs)
     }
 }
 
 impl MulAssign for FE {
-    fn mul_assign(&mut self, other : Self) {
+    fn mul_assign(&mut self, other: Self) {
         *self = *self * other;
     }
 }
 impl DivAssign for FE {
-    fn div_assign(&mut self, other : Self) {
+    fn div_assign(&mut self, other: Self) {
         *self = *self / other;
     }
 }
 impl RemAssign for FE {
-    fn rem_assign(&mut self, other : Self) {
+    fn rem_assign(&mut self, other: Self) {
         *self = *self % other;
     }
 }
@@ -451,13 +452,13 @@ impl Rand for FE {
 
 impl<'a> Add<&'a FE> for FE {
     type Output = Self;
-    fn add(self, rhs : &Self) -> FE {
+    fn add(self, rhs: &Self) -> FE {
         self + *rhs
     }
 }
 impl<'a> Sub<&'a FE> for FE {
     type Output = Self;
-    fn sub(self, rhs : &Self) -> FE {
+    fn sub(self, rhs: &Self) -> FE {
         self - *rhs
     }
 }
@@ -472,31 +473,29 @@ impl<'a, 'b> Sub<&'b FE> for &'a FE {
 
 impl<'a> Mul<&'a FE> for FE {
     type Output = Self;
-    fn mul(self, rhs : &Self) -> FE {
+    fn mul(self, rhs: &Self) -> FE {
         self * *rhs
     }
 }
 impl<'a> Div<&'a FE> for FE {
     type Output = Self;
-    fn div(self, rhs : &Self) -> FE {
+    fn div(self, rhs: &Self) -> FE {
         self / *rhs
     }
 }
 impl<'a> Rem<&'a FE> for FE {
     type Output = Self;
-    fn rem(self, rhs : &Self) -> FE {
+    fn rem(self, rhs: &Self) -> FE {
         self % *rhs
     }
 }
 
-
 impl Num for FE {
     type FromStrRadixErr = &'static str;
-    fn from_str_radix(s: &str, radix: u32) ->
-        Result<Self, &'static str> {
-            let u = u64::from_str_radix(s, radix).map_err(|_|"Bad num")?;
-            FE::from_reduced(u).ok_or("Too big")
-        }
+    fn from_str_radix(s: &str, radix: u32) -> Result<Self, &'static str> {
+        let u = u64::from_str_radix(s, radix).map_err(|_| "Bad num")?;
+        FE::from_reduced(u).ok_or("Too big")
+    }
 }
 
 #[cfg(test)]
@@ -504,10 +503,12 @@ mod tests {
     use math::*;
 
     fn maxrep() -> FE {
-        FE { val : FE_VAL_MAX }
+        FE { val: FE_VAL_MAX }
     }
     fn fullbits() -> FE {
-        FE { val : FULL_BITS_MASK }
+        FE {
+            val: FULL_BITS_MASK,
+        }
     }
 
     #[test]
@@ -527,40 +528,43 @@ mod tests {
         assert_eq!(FE::new(0).value(), 0);
         assert_eq!(FE::new(1337).value(), 1337);
         assert_eq!(FE::new(PRIME_ORDER).value(), 0);
-        assert_eq!(FE::new(PRIME_ORDER+1).value(), 1);
-        assert_eq!(FE::new(PRIME_ORDER-1).value(), PRIME_ORDER - 1);
+        assert_eq!(FE::new(PRIME_ORDER + 1).value(), 1);
+        assert_eq!(FE::new(PRIME_ORDER - 1).value(), PRIME_ORDER - 1);
         assert_eq!(FE::new(PRIME_ORDER).value(), 0);
-        assert_eq!(FE::new(PRIME_ORDER*2).value(), 0);
+        assert_eq!(FE::new(PRIME_ORDER * 2).value(), 0);
         assert_eq!(FE::new(!0u64).value(), (!0u64) % PRIME_ORDER);
         assert_eq!(maxrep().value(), FE_VAL_MAX - PRIME_ORDER);
     }
     #[test]
     fn test_equivalence() {
         assert_eq!(FE::new(0), FE::new(PRIME_ORDER));
-        assert_eq!(FE::new(1), FE::new(PRIME_ORDER+1));
-        assert_eq!(FE::new(1), FE::new(PRIME_ORDER*2+1));
-        assert_eq!(FE::new(PRIME_ORDER-50), FE::new(PRIME_ORDER*4 - 50));
+        assert_eq!(FE::new(1), FE::new(PRIME_ORDER + 1));
+        assert_eq!(FE::new(1), FE::new(PRIME_ORDER * 2 + 1));
+        assert_eq!(FE::new(PRIME_ORDER - 50), FE::new(PRIME_ORDER * 4 - 50));
         assert_eq!(maxrep(), FE::new(FE_VAL_MAX - PRIME_ORDER));
     }
     #[test]
     fn test_add_sub() {
-        assert_eq!(FE::new(0) - FE::new(100), FE::new(PRIME_ORDER-100));
+        assert_eq!(FE::new(0) - FE::new(100), FE::new(PRIME_ORDER - 100));
         assert_eq!(FE::new(100) - FE::new(5), FE::new(95));
-        assert_eq!(FE::new(100) - FE::new(105), FE::new(PRIME_ORDER-5));
-        assert_eq!(FE::new(300) - FE::new(PRIME_ORDER+1), FE::new(299));
+        assert_eq!(FE::new(100) - FE::new(105), FE::new(PRIME_ORDER - 5));
+        assert_eq!(FE::new(300) - FE::new(PRIME_ORDER + 1), FE::new(299));
         assert_eq!(FE::new(1050) + FE::new(1337), FE::new(2387));
-        assert_eq!(FE::new(1337) + FE::new(PRIME_ORDER-37), FE::new(1300));
-        assert_eq!(-FE::new(10) + (- FE::new(15)),
-                   -FE::new(25));
+        assert_eq!(FE::new(1337) + FE::new(PRIME_ORDER - 37), FE::new(1300));
+        assert_eq!(-FE::new(10) + (-FE::new(15)), -FE::new(25));
 
         assert_eq!(-maxrep(), FE::new(PRIME_ORDER * 2 - FE_VAL_MAX));
-        assert_eq!(maxrep() + maxrep(),
-                   FE::new((FE_VAL_MAX - PRIME_ORDER)*2));
+        assert_eq!(
+            maxrep() + maxrep(),
+            FE::new((FE_VAL_MAX - PRIME_ORDER) * 2)
+        );
         assert_eq!(maxrep() - maxrep(), FE::zero());
         assert_eq!(FE::zero() - maxrep(), -maxrep());
 
-        assert_eq!(FE::new(1000) - maxrep(),
-                   FE::new(PRIME_ORDER * 2 - FE_VAL_MAX + 1000));
+        assert_eq!(
+            FE::new(1000) - maxrep(),
+            FE::new(PRIME_ORDER * 2 - FE_VAL_MAX + 1000)
+        );
 
         assert_eq!(-fullbits(), FE::new(PRIME_ORDER * 2 - FULL_BITS_MASK));
         assert_eq!(FE::zero() - fullbits(), -fullbits());
@@ -569,19 +573,26 @@ mod tests {
     fn mult() {
         assert_eq!(FE::new(0) * FE::new(1000), FE::new(0));
         assert_eq!(FE::new(999) * FE::new(1000), FE::new(999000));
-        assert_eq!(FE::new(PRIME_ORDER) * FE::new(PRIME_ORDER),
-                   FE::new(0));
-        assert_eq!(FE::new(PRIME_ORDER-1) * FE::new(PRIME_ORDER-1),
-                   FE::new(1));
-        assert_eq!(FE::new(PRIME_ORDER-2) * FE::new(PRIME_ORDER-2),
-                   FE::new(4));
+        assert_eq!(FE::new(PRIME_ORDER) * FE::new(PRIME_ORDER), FE::new(0));
+        assert_eq!(
+            FE::new(PRIME_ORDER - 1) * FE::new(PRIME_ORDER - 1),
+            FE::new(1)
+        );
+        assert_eq!(
+            FE::new(PRIME_ORDER - 2) * FE::new(PRIME_ORDER - 2),
+            FE::new(4)
+        );
 
-        assert_eq!(maxrep() * maxrep(),
-                   FE::new(FE_VAL_MAX % PRIME_ORDER) *
-                   FE::new(FE_VAL_MAX % PRIME_ORDER));
-        assert_eq!(fullbits() * fullbits(),
-                   FE::new(FULL_BITS_MASK % PRIME_ORDER) *
-                   FE::new(FULL_BITS_MASK % PRIME_ORDER))
+        assert_eq!(
+            maxrep() * maxrep(),
+            FE::new(FE_VAL_MAX % PRIME_ORDER)
+                * FE::new(FE_VAL_MAX % PRIME_ORDER)
+        );
+        assert_eq!(
+            fullbits() * fullbits(),
+            FE::new(FULL_BITS_MASK % PRIME_ORDER)
+                * FE::new(FULL_BITS_MASK % PRIME_ORDER)
+        )
     }
     #[test]
     fn recip() {
@@ -593,27 +604,34 @@ mod tests {
     #[test]
     fn construct_maybe() {
         assert_eq!(FE::from_reduced(12345), Some(FE::new(12345)));
-        assert_eq!(FE::from_reduced(PRIME_ORDER-1),
-                   Some(FE::new(PRIME_ORDER-1)));
+        assert_eq!(
+            FE::from_reduced(PRIME_ORDER - 1),
+            Some(FE::new(PRIME_ORDER - 1))
+        );
         assert_eq!(FE::from_reduced(PRIME_ORDER), None);
-        assert_eq!(FE::from_reduced(PRIME_ORDER*2), None);
+        assert_eq!(FE::from_reduced(PRIME_ORDER * 2), None);
 
         assert_eq!(FE::from_u64_unbiased(12345), Some(FE::new(12345)));
-        let hibit = 1<<N_BITS;
-        assert_eq!(FE::from_u64_unbiased(12345 + hibit),
-                   Some(FE::new(12345)));
-        assert_eq!(FE::from_u64_unbiased(PRIME_ORDER-1),
-                   Some(FE::new(PRIME_ORDER-1)));
+        let hibit = 1 << N_BITS;
+        assert_eq!(FE::from_u64_unbiased(12345 + hibit), Some(FE::new(12345)));
+        assert_eq!(
+            FE::from_u64_unbiased(PRIME_ORDER - 1),
+            Some(FE::new(PRIME_ORDER - 1))
+        );
         assert_eq!(FE::from_u64_unbiased(PRIME_ORDER), None);
-        assert_eq!(FE::from_u64_unbiased(PRIME_ORDER - 1 + hibit),
-                   Some(FE::new(PRIME_ORDER - 1)));
-        assert_eq!(FE::from_u64_unbiased(PRIME_ORDER - 1 + hibit*2),
-                   Some(FE::new(PRIME_ORDER - 1)));
+        assert_eq!(
+            FE::from_u64_unbiased(PRIME_ORDER - 1 + hibit),
+            Some(FE::new(PRIME_ORDER - 1))
+        );
+        assert_eq!(
+            FE::from_u64_unbiased(PRIME_ORDER - 1 + hibit * 2),
+            Some(FE::new(PRIME_ORDER - 1))
+        );
         assert_eq!(FE::from_u64_unbiased(PRIME_ORDER + hibit), None);
         assert_eq!(FE::from_u64_unbiased(PRIME_ORDER + hibit * 2), None);
     }
 
-    fn mul_slow(a : FE, b : FE) -> FE {
+    fn mul_slow(a: FE, b: FE) -> FE {
         use num::bigint::BigUint;
         use num::traits::cast::FromPrimitive;
         use num::traits::cast::ToPrimitive;
@@ -624,8 +642,7 @@ mod tests {
     }
 
     use quickcheck::{Arbitrary, Gen};
-    impl Arbitrary for FE
-    {
+    impl Arbitrary for FE {
         fn arbitrary<G: Gen>(g: &mut G) -> FE {
             g.gen()
         }
@@ -646,4 +663,3 @@ mod tests {
         }
     }
 }
-

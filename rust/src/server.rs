@@ -1,30 +1,32 @@
-use std::collections::HashMap;
-use std::iter::FromIterator;
 use byteorder::{ByteOrder, NetworkEndian};
 use num::Zero;
+use std::collections::HashMap;
+use std::iter::FromIterator;
 
-use math::FE;
 use data::*;
 use encrypt::hybrid::PrivcountDecryptor;
 use encrypt::Decryptor;
+use math::FE;
 use shamir;
 
 // The data a TR recovers from a single client
 pub struct ClientData {
-    client_key : ClientKey,
-    shares : Vec<(CtrId, FE)>
+    client_key: ClientKey,
+    shares: Vec<(CtrId, FE)>,
 }
 
 pub struct ServerKeys {
-    pub enc_secret : [u8;32],
-    pub public : TrKeys,
+    pub enc_secret: [u8; 32],
+    pub public: TrKeys,
 }
 
 impl ServerKeys {
-    pub fn decode_from(&self,
-                   client : &ClientKey,
-                   counters : &[CtrId],
-                   data : &TrData) -> Result<ClientData, &'static str> {
+    pub fn decode_from(
+        &self,
+        client: &ClientKey,
+        counters: &[CtrId],
+        data: &TrData,
+    ) -> Result<ClientData, &'static str> {
         // Is this for us?
         if &data.keys != &self.public {
             return Err("Keys aren't our key.");
@@ -34,16 +36,17 @@ impl ServerKeys {
         }
 
         // It is for us.  Recover the encrypted things.
-        let dec = PrivcountDecryptor::new(&self.enc_secret,
-                                          &self.public.signing_key);
+        let dec =
+            PrivcountDecryptor::new(&self.enc_secret, &self.public.signing_key);
 
-        let seedval = dec.decrypt(&data.encrypted_seed, SEED_ENCRYPTION_TWEAK)
+        let seedval = dec
+            .decrypt(&data.encrypted_seed, SEED_ENCRYPTION_TWEAK)
             .ok_or("Seed decryption failed.")?;
-        let ctrs = dec.decrypt(&data.encrypted_counters, Y_ENCRYPTION_TWEAK)
+        let ctrs = dec
+            .decrypt(&data.encrypted_counters, Y_ENCRYPTION_TWEAK)
             .ok_or("Counter decryption failed.")?;
 
-        let seed = Seed::from_bytes(&seedval)
-            .ok_or("Bad seed")?;
+        let seed = Seed::from_bytes(&seedval).ok_or("Bad seed")?;
         let masks = seed.counter_masks(counters.len());
         if ctrs.len() != masks.len() * 8 {
             return Err("Wrong number of counters.");
@@ -56,18 +59,23 @@ impl ServerKeys {
         for u in u64s {
             yvals.push(FE::from_reduced(u).ok_or("BadFE")?);
         }
-        let shares = Vec::from_iter(counters.iter().map(|c| *c).zip(
-            masks.into_iter().zip(yvals.into_iter())
-                .map(|(mask,y)| mask + y)
-        ));
+        let shares = Vec::from_iter(
+            counters.iter().map(|c| *c).zip(
+                masks
+                    .into_iter()
+                    .zip(yvals.into_iter())
+                    .map(|(mask, y)| mask + y),
+            ),
+        );
 
-        Ok(ClientData { client_key : client.clone(),
-                        shares } )
+        Ok(ClientData {
+            client_key: client.clone(),
+            shares,
+        })
     }
 }
 
-pub fn SumShares(client_data : &[ClientData]) -> HashMap<CtrId, FE>
-{
+pub fn SumShares(client_data: &[ClientData]) -> HashMap<CtrId, FE> {
     let mut result = HashMap::new();
 
     for cd in client_data.iter() {
