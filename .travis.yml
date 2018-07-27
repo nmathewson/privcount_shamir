@@ -21,6 +21,9 @@ dist: trusty
 matrix:
   allow_failures:
     - rust: nightly
+    ## For some reason, the beta channel doesn't install on OS X
+    - rust: beta
+      os: osx
 
 script:
   - cd rust
