@@ -63,7 +63,7 @@ pub mod hybrid {
         }
     }
 
-    impl super::Encryptor for PrivcountEncryptor {
+    impl Encryptor for PrivcountEncryptor {
         fn encrypt(&self, inp: &[u8], tweak: &[u8], rng: &mut Rng) -> Vec<u8> {
             let mut keys = [0; S_KEY_LEN + S_IV_LEN + MAC_KEY_LEN];
 
