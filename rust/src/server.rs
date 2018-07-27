@@ -10,6 +10,7 @@ use math::FE;
 
 // The data a TR recovers from a single client
 pub struct ClientData {
+    #[allow(dead_code)]
     client_key: ClientKey,
     shares: Vec<(CtrId, FE)>,
 }
