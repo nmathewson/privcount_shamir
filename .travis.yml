@@ -1,0 +1,37 @@
+language: rust
+
+cache: cargo
+
+rust:
+  - stable
+  - beta
+  - nightly
+
+os:
+  - linux
+  #- osx
+
+## (Linux only) Use the Ubuntu Trusty images
+dist: trusty
+
+matrix:
+  allow_failures:
+    - rust: nightly
+
+script:
+  - cd rust
+  - cargo build --verbose
+  - cargo test --verbose
+
+notifications:
+  irc:
+    channels:
+      - "irc.oftc.net#tor-ci"
+    template:
+      - "%{repository} %{branch} %{commit} - %{author}: %{commit_subject}"
+      - "Build #%{build_number} %{result}. Details: %{build_url}"
+    on_success: change
+    on_failure: change
+  email:
+    on_success: never
+    on_failure: change
