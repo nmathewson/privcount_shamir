@@ -29,7 +29,7 @@ const OFFSET_BIT: u64 = 30;
 /// order of the prime field.
 ///
 /// All the arithmetic on field elements prime is done modulo this value.
-const PRIME_ORDER: u64 = (1 << N_BITS) - (1 << OFFSET_BIT) - 1;
+pub const PRIME_ORDER: u64 = (1 << N_BITS) - (1 << OFFSET_BIT) - 1;
 
 // There are some constraints on those constants, as described here:
 //
@@ -123,6 +123,16 @@ impl FE {
     ///
     /// This function accepts any u64, and creates an FE
     /// that represents that value modulo PRIME_ORDER.
+    ///
+    /// # Examples
+    /// ```
+    /// use privcount::{FE, PRIME_ORDER};
+    /// let n = FE::new(1000);
+    /// assert_eq!(n.value(), 1000);
+    ///
+    /// let m = FE::new(1<<63);
+    /// assert_eq!(m.value(), (1<<63) % PRIME_ORDER);
+    /// ```
     pub fn new(v: u64) -> Self {
         // This bit_reduce_once ensures that the value is in range
         // 0..FE_VAL_MAX.
@@ -133,11 +143,27 @@ impl FE {
     /// Construct a random FE from a random u64, discarding biased values.
     ///
     /// Construct a new FE value from a u64 value, such that if the
-    /// inputs to this function are uniform random u64s, then all of the
-    /// non-None outputs of this function are uniform random FEs.
+    /// inputs to this function are uniform random u64s, then all of
+    /// the non-None outputs of this function are uniform random FEs.
     //
     /// The implementation should try to return a non-None value for
     /// the majority of inputs.
+    ///
+    /// # Examples
+    /// ```
+    /// extern crate rand;
+    /// extern crate privcount;
+    /// use privcount::FE;
+    /// use rand::Rng;
+    ///
+    /// let mut rng = rand::thread_rng();
+    ///
+    /// let random_fe = loop {
+    ///    if let Some(x) = FE::from_u64_unbiased(rng.next_u64()) {
+    ///       break x;
+    ///    }
+    /// };
+    /// ```
     pub fn from_u64_unbiased(v: u64) -> Option<Self> {
         // We first mask out the high bits of v, and then return a value
         // only when the masked value is less than PRIME_ORDER.  This
@@ -145,8 +171,20 @@ impl FE {
         // = 1 - 2^-32 - 1^-62.
         FE::from_reduced(v & FULL_BITS_MASK)
     }
+
     /// Construct a new FE value if `v` is in range 0..PRIME_ORDER-1.
     /// If it is not, return None.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use privcount::FE;
+    ///
+    /// assert_eq!(FE::from_reduced(12345), Some(FE::new(12345)));
+    ///
+    /// // Not reduced, so it will fail.
+    /// assert_eq!(FE::from_reduced(1<<63), None);
+    /// ```
     pub fn from_reduced(v: u64) -> Option<Self> {
         if v < PRIME_ORDER {
             Some(FE { val: v })
@@ -154,12 +192,18 @@ impl FE {
             None
         }
     }
+
     /// Construct a new FE value from a u32 input.
+    ///
+    /// Because every u32 is smaller than the PRIME_ORDER, this
+    /// function cannot fail and does not need to reduce its input
+    /// modulo PRIME_ORDER.
     fn new_raw(v: u32) -> Self {
         // Since v <= u32::MAX, we know that it is less than FE_VAL_MAX.
         debug_assert!((std::u32::MAX as u64) < FE_VAL_MAX);
         FE { val: v as u64 }
     }
+
     /// Return the value of this FE, as an integer in range 0..PRIME_ORDER-1.
     pub fn value(self) -> u64 {
         // self.val is already bit-reduced once, so we only have to
@@ -167,7 +211,16 @@ impl FE {
         // Then, reduce_by_p will put it in range 0..PRIME_ORDER - 1
         reduce_by_p(bit_reduce_once(self.val))
     }
+
     /// Compute the reciprocal of this value.
+    ///
+    /// # Examples
+    /// ```
+    /// use privcount::FE;
+    /// let n = FE::new(1337);
+    /// let m = n.recip();
+    /// assert_eq!(FE::new(1), n * m);
+    /// ```
     pub fn recip(self) -> Self {
         debug_assert_ne!(self, FE::new_raw(0));
 
@@ -462,8 +515,7 @@ impl RemAssign for FE {
 impl Rand for FE {
     fn rand<R: Rng>(rng: &mut R) -> FE {
         loop {
-            let v = rng.next_u64() & FULL_BITS_MASK;
-            if let Some(fe) = FE::from_reduced(v) {
+            if let Some(fe) = FE::from_u64_unbiased(rng.next_u64()) {
                 return fe;
             }
         }

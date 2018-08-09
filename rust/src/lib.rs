@@ -35,6 +35,7 @@ extern crate primal;
 mod math;
 pub mod shamir;
 pub use math::FE;
+pub use math::PRIME_ORDER;
 
 pub mod client;
 pub mod data;
