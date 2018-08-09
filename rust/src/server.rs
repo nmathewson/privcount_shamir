@@ -53,7 +53,7 @@ impl ServerKeys {
             .ok_or("Counter decryption failed.")?;
 
         let seed = Seed::from_bytes(&seedval)?;
-        let masks = seed.counter_masks(n_counters);
+        let masks = seed.counter_masks(n_counters)?;
         if ctrs.len() != masks.len() * 8 {
             return Err("Wrong number of counters.");
         }

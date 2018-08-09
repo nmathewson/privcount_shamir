@@ -35,7 +35,7 @@ impl TrState {
     fn new<R: Rng>(rng: &mut R, keys: &TrKeys, n_counters: u32)
                    -> Result<Self, &'static str> {
         let (seed, encrypted_seed) = new_seed(rng, keys)?;
-        let counters = seed.counter_masks(n_counters);
+        let counters = seed.counter_masks(n_counters)?;
         Ok(TrState {
             keys: keys.clone(),
             encrypted_seed: encrypted_seed,

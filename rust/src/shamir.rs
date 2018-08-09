@@ -6,6 +6,9 @@ use rand::{Rand, Rng};
 use std::iter::FromIterator;
 use std::ops::Sub;
 
+// We don't support more than this many shares, although we could.
+pub const MAX_SHARES : u32 = 1024;
+
 // A parambuilder is used to configure the secret-sharing environment.
 pub struct ParamBuilder<N> {
     p: Params<N>,
@@ -33,6 +36,9 @@ where
     pub fn new(k: u32, n: u32) -> Result<Self, &'static str> {
         if k > n {
             return Err("Invalid parameters: k > n.");
+        }
+        if n > MAX_SHARES {
+            return Err("Invalid parameters: n > MAX_SHARES.");
         }
         Ok(ParamBuilder {
             p: Params {

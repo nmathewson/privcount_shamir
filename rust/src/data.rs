@@ -31,6 +31,9 @@ pub struct CounterData {
     pub tr_data: Vec<TrData>,
 }
 
+// How many counters will we support?
+pub const MAX_COUNTERS : u32 = 1 << 28;
+
 pub const SEED_ENCRYPTION_TWEAK: &'static [u8] = b"privctr-seed-v1";
 pub const Y_ENCRYPTION_TWEAK: &'static [u8] = b"privctr-shares-v1";
 
@@ -77,9 +80,13 @@ impl Seed {
             Err("Incorrect seed length.")
         }
     }
-    pub fn counter_masks(self, n_masks: u32) -> Vec<FE> {
+    pub fn counter_masks(self, n_masks: u32) -> Result<Vec<FE>, &'static str> {
         const EXTRA_MASKS: u32 = 4;
         const EXTRA_BYTES_PER_MASK: usize = 1;
+
+        if n_masks > MAX_COUNTERS {
+            return Err("Too many counters to generate masks for.");
+        }
 
         // With very high probability, this is more data than we need.
         let bytes_needed : usize = (n_masks + EXTRA_MASKS) as usize * (8 + EXTRA_BYTES_PER_MASK);
@@ -93,6 +100,9 @@ impl Seed {
         let mut result = Vec::new();
         let mut slice = &bytes[..];
         while result.len() < n_masks as usize {
+            if slice.len() < 8 {
+                return Err("Internal error: too many masks were out-of-range.");
+            }
             let (these, remainder) = slice.split_at(8);
             let v64 = NetworkEndian::read_u64(these);
             if let Some(elt) = FE::from_u64_unbiased(v64) {
@@ -100,6 +110,6 @@ impl Seed {
             }
             slice = remainder;
         }
-        result
+        Ok(result)
     }
 }
