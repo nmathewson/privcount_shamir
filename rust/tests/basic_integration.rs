@@ -27,10 +27,10 @@ fn gen_server_keys(rng: &mut Rng) -> server::ServerKeys {
 }
 
 fn test_combination(
-    n_counters: usize,
-    n_clients: usize,
-    n_trs: usize,
-    k_value: usize,
+    n_counters: u32,
+    n_clients: u32,
+    n_trs: u32,
+    k_value: u32,
 ) {
     let mut rng = OsRng::new().unwrap();
 
@@ -92,7 +92,7 @@ fn test_combination(
     // use the first k shares to reconstruct the secret for each counter.
     for cid in counter_ids.iter() {
         let mut ctr_shares = Vec::new();
-        for &(x, ref map) in shares[0..k_value].iter() {
+        for &(x, ref map) in shares[0..k_value as usize].iter() {
             let y = map.get(cid).unwrap();
             ctr_shares.push(shamir::Share { x, y: *y });
         }

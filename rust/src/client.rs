@@ -31,7 +31,7 @@ pub struct TrState {
 }
 
 impl TrState {
-    fn new<R: Rng>(rng: &mut R, keys: &TrKeys, n_counters: usize) -> Self {
+    fn new<R: Rng>(rng: &mut R, keys: &TrKeys, n_counters: u32) -> Self {
         let (seed, encrypted_seed) = new_seed(rng, keys);
         let counters = seed.counter_masks(n_counters);
         TrState {
@@ -88,16 +88,16 @@ impl CounterSet {
         rng: &mut R,
         counter_ids: &[CtrId],
         tr_ids: &[TrKeys],
-        k: usize,
+        k: u32,
     ) -> Self {
         let counter_ids = counter_ids.to_vec();
-        let n_counters = counter_ids.len();
+        let n_counters = counter_ids.len() as u32; // XX Should return Result.
         let mut tr_states = Vec::from_iter(
             tr_ids.iter().map(|k| TrState::new(rng, k, n_counters)),
         );
 
         let shamir_params = {
-            let mut b = shamir::ParamBuilder::new(k, tr_ids.len());
+            let mut b = shamir::ParamBuilder::new(k, tr_ids.len() as u32);//XX
             for state in tr_states.iter() {
                 b.add_x_coordinate(&state.x);
             }

@@ -31,6 +31,10 @@ pub mod hybrid {
     use crypto::sha3;
     use crypto::util::fixed_time_eq;
 
+    /*
+     * These values are specified as usize because they're used as the size of
+     * buffer slices
+     */
     const SALT_LEN: usize = 16;
     const S_KEY_LEN: usize = 32;
     const S_IV_LEN: usize = 16;

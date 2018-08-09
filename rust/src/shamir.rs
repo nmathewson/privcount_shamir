@@ -14,8 +14,8 @@ pub struct ParamBuilder<N> {
 // A Params structure encodes the K, the N, and the X coordinates to use
 // for the various shares
 pub struct Params<N> {
-    k: usize,
-    n: usize,
+    k: u32,
+    n: u32,
     x_coordinates: Vec<N>,
 }
 
@@ -30,7 +30,7 @@ impl<N> ParamBuilder<N>
 where
     N: NumRef + Clone + Rand,
 {
-    pub fn new(k: usize, n: usize) -> Self {
+    pub fn new(k: u32, n: u32) -> Self {
         assert!(k <= n);
         ParamBuilder {
             p: Params {
@@ -52,7 +52,7 @@ where
 
     // Fill in the X coordinates randomly.
     pub fn fill_x_coordinates<R: Rng>(&mut self, rng: &mut R) {
-        while self.p.x_coordinates.len() < self.p.n {
+        while self.p.x_coordinates.len() < self.p.n as usize {
             let n = rng.gen::<N>();
             self.add_x_coordinate(&n);
         }
@@ -61,7 +61,7 @@ where
     // Convert a ParamBuilder to a Params.
     // Requires that the X coordinates have been filled.
     pub fn finalize(self) -> Result<Params<N>, ()> {
-        if self.p.x_coordinates.len() == self.p.n {
+        if self.p.x_coordinates.len() == self.p.n as usize {
             Ok(self.p)
         } else {
             Err(())
@@ -91,12 +91,12 @@ where
         rng: &mut R,
     ) -> Vec<Share<N>> {
         // Generate a random polynomial with Y intercept of secret.
-        let mut poly = Vec::with_capacity(self.k);
+        let mut poly = Vec::with_capacity(self.k as usize);
         for _ in 1..(self.k) {
             poly.push(rng.gen());
         }
         poly.push(secret);
-        assert_eq!(poly.len(), self.k);
+        assert_eq!(poly.len(), self.k as usize);
 
         // Evaluate this polynomial at each X coordinate.
         Vec::from_iter(self.x_coordinates.iter().map(|x| Share {

@@ -2,6 +2,7 @@ use byteorder::{ByteOrder, NetworkEndian};
 use num::Zero;
 use std::collections::HashMap;
 use std::iter::FromIterator;
+use std::u32;
 
 use data::*;
 use encrypt::hybrid::PrivcountDecryptor;
@@ -34,6 +35,11 @@ impl ServerKeys {
         if data.x != self.public.get_x_coord() {
             return Err("Wrong X coordinate.");
         }
+        // XX  Use try_from once it's stable
+        if counters.len() > u32::MAX as usize {
+            return Err("Too many counters.")
+        }
+        let n_counters : u32 = counters.len() as u32;
 
         // It is for us.  Recover the encrypted things.
         let dec =
@@ -47,7 +53,7 @@ impl ServerKeys {
             .ok_or("Counter decryption failed.")?;
 
         let seed = Seed::from_bytes(&seedval).ok_or("Bad seed")?;
-        let masks = seed.counter_masks(counters.len());
+        let masks = seed.counter_masks(n_counters);
         if ctrs.len() != masks.len() * 8 {
             return Err("Wrong number of counters.");
         }
