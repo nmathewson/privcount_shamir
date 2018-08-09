@@ -17,7 +17,7 @@ pub struct TrKeys {
     pub signing_key: [u8; 32],
 }
 
-// the data that a client exports for a single TR.
+// Stores the data that a client exports for a single TR.
 pub struct TrData {
     pub keys: TrKeys,
     pub encrypted_seed: Vec<u8>,

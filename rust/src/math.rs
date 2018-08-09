@@ -1,8 +1,9 @@
-// Implements a prime field modulo some prime of form 2^A - 2^B - 1.
-//
-// Tries to be fairly efficient, and to not have timing side-channels.
-//
-// Certain constraints are placed on A and B, see below.
+//! Implementation for arithmetic over a prime field modulo some prime of the form
+//! 2^A - 2^B - 1.
+//!
+//! Tries to be fairly efficient, and to not have timing side-channels.
+//!
+//! Certain constraints are placed on A and B, see below.
 
 use num::traits::{Num, One, Zero};
 use rand::{Rand, Rng};
@@ -16,17 +17,25 @@ use std::ops::{AddAssign, DivAssign, MulAssign, RemAssign, SubAssign};
 
 // Here are the constants that determine our prime:
 //
-// number of bits in our field elements
+
+/// Number of bits in our field elements.
+///
+/// This is `A` in the formula 2^A - 2^B - 1
 const N_BITS: u64 = 62;
-// Which bit (other than bit 0) do we clear in our prime?
+/// Which bit (other than bit 0) do we clear in our prime?
+///
+/// This is `B` in the formula 2^A - 2^B - 1
 const OFFSET_BIT: u64 = 30;
-// order of the prime field
+/// order of the prime field.
+///
+/// All the arithmetic on field elements prime is done modulo this value.
 const PRIME_ORDER: u64 = (1 << N_BITS) - (1 << OFFSET_BIT) - 1;
 
 // There are some constraints on those constants, as described here:
 //
 // 2^N_BITS - (2^OFFSET_BIT + 1) must be prime; we do all of our
 //   arithmetic modulo this prime.
+//
 // Choose OFFSET_BIT low, and less than N_BITS/2.
 // Our recip() implementation requires OFFSET_BIT != 2.
 // Choose N_BITS even, and no more than 64 - 2, and no less than 34.
@@ -52,22 +61,23 @@ const PRIME_ORDER: u64 = (1 << N_BITS) - (1 << OFFSET_BIT) - 1;
 //
 //  We use formats [0] and [1] for intermediate calculations.
 
-// Mask to mask off all bits that aren't used in the field elements.
+/// Mask to mask off all bits that aren't used in the field elements.
 const FULL_BITS_MASK: u64 = (1 << N_BITS) - 1;
 
 // We use these macros to check invariants.
 
-// Number of bits in a u64 which we don't use.
+/// Number of bits in a u64 which we don't use.
 const REMAINING_BITS: u64 = 64 - N_BITS;
-// Largest remaining value after we take a u64 and shift away the
-// bits that we want to use in our field.
+/// Largest remaining value after we take a u64 and shift away the
+/// bits that we want to use in our field.
 const MAX_EXCESS: u64 = (1 << REMAINING_BITS) - 1;
-// Largest value to use in our field elements.  This will spill
-// over our regular bit mask by a little, since we don't store stuff
-// in a fully bit-reduced form.
+/// Largest value to use in representing out field elements.  This will spill
+/// over our regular bit mask by a little, since we don't store stuff
+/// in a fully bit-reduced form.
 const FE_VAL_MAX: u64 =
     FULL_BITS_MASK + (MAX_EXCESS << OFFSET_BIT) + MAX_EXCESS;
 
+/// A member of the prime field used for Privcount.
 #[derive(Debug, Copy, Clone)]
 pub struct FE {
     // This value is stored in a bit-reduced form: it will be in range
@@ -76,10 +86,11 @@ pub struct FE {
     val: u64,
 }
 
-// Given a value in range 0..U64_MAX, returns a value in range 0..FE_VAL_MAX.
-//
-// (Given a value in range 0..FE_VAL_MAX, the output is in range
-// 0..FULL_BITS_MASK.)
+/// Given a value in range 0..U64_MAX, returns a value in range 0..FE_VAL_MAX that
+/// is equavalent modulo PRIME_ORDER.
+///
+/// Given a value in range 0..FE_VAL_MAX, return an output in range
+/// 0..FULL_BITS_MASK that is equivalent modulo PRIME_ORDER.
 fn bit_reduce_once(v: u64) -> u64 {
     // Excess is in range 0..MAX_EXCESS
     let excess = v >> N_BITS;
@@ -91,9 +102,13 @@ fn bit_reduce_once(v: u64) -> u64 {
     result
 }
 
-// Returns "if v > PRIME_ORDER { v - PRIME_ORDER } else { v }".
-//
-// We only call this when it will produce a value in range 0..PRIME_ORDER-1.
+/// Subtract PRIME_ORDER from `v` if it is greater than PRIME_ORDER.
+///
+/// In other words, this function returns
+/// "if v > PRIME_ORDER { v - PRIME_ORDER } else { v }",
+/// but tries to do so without side channels.
+///
+/// We only call this when it will produce a value in range 0..PRIME_ORDER-1.
 fn reduce_by_p(v: u64) -> u64 {
     debug_assert!(v < PRIME_ORDER * 2);
     let difference = v.wrapping_sub(PRIME_ORDER);
@@ -104,8 +119,10 @@ fn reduce_by_p(v: u64) -> u64 {
 }
 
 impl FE {
-    // Construct a new FE value.  Accepts any u64, and creates an FE
-    // that represents that value modulo PRIME_ORDER.
+    /// Construct a new FE value.
+    ///
+    /// This function accepts any u64, and creates an FE
+    /// that represents that value modulo PRIME_ORDER.
     pub fn new(v: u64) -> Self {
         // This bit_reduce_once ensures that the value is in range
         // 0..FE_VAL_MAX.
@@ -113,12 +130,14 @@ impl FE {
             val: bit_reduce_once(v),
         }
     }
-    // Construct a new FE value from a u64 value, such that if the
-    // inputs to this function are uniform random u64s, then all of the
-    // non-None outputs of this function are uniform random FEs.
+    /// Construct a random FE from a random u64, discarding biased values.
+    ///
+    /// Construct a new FE value from a u64 value, such that if the
+    /// inputs to this function are uniform random u64s, then all of the
+    /// non-None outputs of this function are uniform random FEs.
     //
-    // The implementation should try to return a non-None value for
-    // the majority of inputs.
+    /// The implementation should try to return a non-None value for
+    /// the majority of inputs.
     pub fn from_u64_unbiased(v: u64) -> Option<Self> {
         // We first mask out the high bits of v, and then return a value
         // only when the masked value is less than PRIME_ORDER.  This
@@ -126,8 +145,8 @@ impl FE {
         // = 1 - 2^-32 - 1^-62.
         FE::from_reduced(v & FULL_BITS_MASK)
     }
-    // Construct a new FE value if v is in range 0..PRIME_ORDER-1.
-    // If it is not, return None.
+    /// Construct a new FE value if `v` is in range 0..PRIME_ORDER-1.
+    /// If it is not, return None.
     pub fn from_reduced(v: u64) -> Option<Self> {
         if v < PRIME_ORDER {
             Some(FE { val: v })
@@ -135,19 +154,20 @@ impl FE {
             None
         }
     }
+    /// Construct a new FE value from a u32 input.
     fn new_raw(v: u32) -> Self {
         // Since v <= u32::MAX, we know that it is less than FE_VAL_MAX.
         debug_assert!((std::u32::MAX as u64) < FE_VAL_MAX);
         FE { val: v as u64 }
     }
-    // Return the value of this FE, as an integer in range 0..PRIME_ORDER-1.
+    /// Return the value of this FE, as an integer in range 0..PRIME_ORDER-1.
     pub fn value(self) -> u64 {
         // self.val is already bit-reduced once, so we only have to
         // bit-reduce it once more to put it in range 0..FULL_BITS_MASK.
         // Then, reduce_by_p will put it in range 0..PRIME_ORDER - 1
         reduce_by_p(bit_reduce_once(self.val))
     }
-    // Compute the reciprocal of this value.
+    /// Compute the reciprocal of this value.
     pub fn recip(self) -> Self {
         debug_assert_ne!(self, FE::new_raw(0));
 
