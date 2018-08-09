@@ -70,11 +70,11 @@ impl TrData {
 }
 
 impl Seed {
-    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, &'static str> {
         if bytes.len() == SEED_LEN {
-            Some(Seed(bytes.to_vec()))
+            Ok(Seed(bytes.to_vec()))
         } else {
-            None
+            Err("Incorrect seed length.")
         }
     }
     pub fn counter_masks(self, n_masks: u32) -> Vec<FE> {

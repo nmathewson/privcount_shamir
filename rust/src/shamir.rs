@@ -62,11 +62,11 @@ where
 
     // Convert a ParamBuilder to a Params.
     // Requires that the X coordinates have been filled.
-    pub fn finalize(self) -> Result<Params<N>, ()> {
+    pub fn finalize(self) -> Result<Params<N>, &'static str> {
         if self.p.x_coordinates.len() == self.p.n as usize {
             Ok(self.p)
         } else {
-            Err(())
+            Err("Length mismatch in finalize.")
         }
     }
 }
@@ -139,7 +139,7 @@ mod tests {
     use shamir::*;
     #[test]
     fn demo() {
-        let mut pb = ParamBuilder::new(3, 5);
+        let mut pb = ParamBuilder::new(3, 5).unwrap();
         let mut rng = rand::thread_rng();
         pb.fill_x_coordinates(&mut rng);
         let p = pb.finalize().unwrap();

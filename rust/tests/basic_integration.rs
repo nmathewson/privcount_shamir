@@ -58,7 +58,7 @@ fn test_combination(
             let true_ctr = accurate_sum.entry(*id).or_insert(0);
             *true_ctr += to_add;
         }
-        client_data.push(ctrs.finalize(&mut rng));
+        client_data.push(ctrs.finalize(&mut rng).unwrap());
     }
 
     // then simulate each server; create each one's share of each counter's

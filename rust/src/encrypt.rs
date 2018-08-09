@@ -219,7 +219,7 @@ mod tests {
         let encryptor = PrivcountEncryptor::new(&pk, &signing_key);
         let decryptor = PrivcountDecryptor::new(&sk, &signing_key);
 
-        let encrypted = encryptor.encrypt(&msg[..], &tweak[..], &mut rng);
+        let encrypted = encryptor.encrypt(&msg[..], &tweak[..], &mut rng).unwrap();
         assert_eq!(encrypted.len() - msg.len(), ENCRYPTED_OVERHEAD);
 
         let result = decryptor.decrypt(&encrypted, &tweak[..]);
