@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::iter::FromIterator;
+use std::u32;
 
 use byteorder::{ByteOrder, NetworkEndian};
 use math::FE;
@@ -89,15 +90,23 @@ impl CounterSet {
         counter_ids: &[CtrId],
         tr_ids: &[TrKeys],
         k: u32,
-    ) -> Self {
+    ) -> Result<Self, &'static str> {
+        if counter_ids.len() > u32::MAX as usize {
+            return Err("Too many counters.");
+        }
+        if tr_ids.len() > u32::MAX as usize {
+            return Err("Too many tr_ids.");
+        }
+
         let counter_ids = counter_ids.to_vec();
-        let n_counters = counter_ids.len() as u32; // XX Should return Result.
+        let n_counters = counter_ids.len() as u32;
+        let n_trs = tr_ids.len() as u32;
         let mut tr_states = Vec::from_iter(
             tr_ids.iter().map(|k| TrState::new(rng, k, n_counters)),
         );
 
         let shamir_params = {
-            let mut b = shamir::ParamBuilder::new(k, tr_ids.len() as u32);//XX
+            let mut b = shamir::ParamBuilder::new(k, n_trs);
             for state in tr_states.iter() {
                 b.add_x_coordinate(&state.x);
             }
@@ -120,11 +129,11 @@ impl CounterSet {
             counters.insert(*cid, counter);
         }
 
-        CounterSet {
+        Ok(CounterSet {
             counter_ids,
             counters,
             tr_states,
-        }
+        })
     }
 
     pub fn ctr(&mut self, ctr_id: CtrId) -> Option<&mut Counter> {

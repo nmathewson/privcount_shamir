@@ -50,7 +50,7 @@ fn test_combination(
     // simulate each client.
     for client_idx in 0..n_clients {
         let mut ctrs =
-            client::CounterSet::new(&mut rng, &counter_ids, &tr_keys, k_value);
+            client::CounterSet::new(&mut rng, &counter_ids, &tr_keys, k_value).unwrap();
 
         for id in counter_ids.iter() {
             let to_add = id.0 + (client_idx * 17) as u32; // add a dummy value
