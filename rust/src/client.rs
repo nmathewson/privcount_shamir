@@ -20,7 +20,7 @@ fn new_seed<R: Rng>(rng: &mut R, keys: &TrKeys) -> (Seed, Vec<u8>) {
     rng.fill_bytes(&mut seed);
 
     let enc = PrivcountEncryptor::new(&keys.enc_key, &keys.signing_key);
-    let encrypted = enc.encrypt(&seed, SEED_ENCRYPTION_TWEAK, rng);
+    let encrypted = enc.encrypt(&seed, SEED_ENCRYPTION_TWEAK, rng).unwrap();// XXX
     (Seed::from_bytes(&seed).unwrap(), encrypted)
 }
 
@@ -51,7 +51,7 @@ impl TrState {
         let mut encoded = Vec::with_capacity(u64s.len() * 8);
         encoded.resize(u64s.len() * 8, 0);
         NetworkEndian::write_u64_into(&u64s, &mut encoded[..]);
-        let encrypted = enc.encrypt(&encoded, Y_ENCRYPTION_TWEAK, rng);
+        let encrypted = enc.encrypt(&encoded, Y_ENCRYPTION_TWEAK, rng).unwrap();//XXX
 
         TrData::new(&self.keys, self.encrypted_seed, self.x, encrypted)
     }
@@ -106,7 +106,7 @@ impl CounterSet {
         );
 
         let shamir_params = {
-            let mut b = shamir::ParamBuilder::new(k, n_trs);
+            let mut b = shamir::ParamBuilder::new(k, n_trs).unwrap(); // XXX
             for state in tr_states.iter() {
                 b.add_x_coordinate(&state.x);
             }
@@ -118,11 +118,15 @@ impl CounterSet {
             let mut counter = Counter::new(*cid);
             let noise = FE::new(0); // XXXXX no noise!
             let shares = shamir_params.share_secret(noise, rng);
-            assert_eq!(shares.len(), tr_ids.len());
+            if shares.len() != tr_ids.len() {
+                return Err("Internal error: incorrect number of shares generated.");
+            }
             counter.val = rng.gen();
 
             for (share, tr_state) in shares.iter().zip(tr_states.iter_mut()) {
-                assert_eq!(share.x, tr_state.x);
+                if share.x != tr_state.x {
+                    return Err("Internal error: mismatched share generated.");
+                }
                 let mask = tr_state.counters[idx];
                 tr_state.counters[idx] = share.y - mask - counter.val;
             }

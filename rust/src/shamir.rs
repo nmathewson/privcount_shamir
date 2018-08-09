@@ -30,15 +30,17 @@ impl<N> ParamBuilder<N>
 where
     N: NumRef + Clone + Rand,
 {
-    pub fn new(k: u32, n: u32) -> Self {
-        assert!(k <= n);
-        ParamBuilder {
+    pub fn new(k: u32, n: u32) -> Result<Self, &'static str> {
+        if k > n {
+            return Err("Invalid parameters: k > n.");
+        }
+        Ok(ParamBuilder {
             p: Params {
                 k,
                 n,
                 x_coordinates: Vec::new(),
             },
-        }
+        })
     }
 
     // Add a single X coordinate manually.
@@ -96,7 +98,7 @@ where
             poly.push(rng.gen());
         }
         poly.push(secret);
-        assert_eq!(poly.len(), self.k as usize);
+        debug_assert_eq!(poly.len(), self.k as usize);
 
         // Evaluate this polynomial at each X coordinate.
         Vec::from_iter(self.x_coordinates.iter().map(|x| Share {

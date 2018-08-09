@@ -4,7 +4,7 @@
 use rand::Rng;
 
 pub trait Encryptor {
-    fn encrypt(&self, inp: &[u8], tweak: &[u8], rng: &mut Rng) -> Vec<u8>;
+    fn encrypt(&self, inp: &[u8], tweak: &[u8], rng: &mut Rng) -> Result<Vec<u8>, &'static str>;
 }
 
 pub trait Decryptor {
@@ -68,7 +68,8 @@ pub mod hybrid {
     }
 
     impl Encryptor for PrivcountEncryptor {
-        fn encrypt(&self, inp: &[u8], tweak: &[u8], rng: &mut Rng) -> Vec<u8> {
+        fn encrypt(&self, inp: &[u8], tweak: &[u8], rng: &mut Rng)
+                   -> Result<Vec<u8>, &'static str> {
             let mut keys = [0; S_KEY_LEN + S_IV_LEN + MAC_KEY_LEN];
 
             let seckey_tmp = super::keygen::curve25519_seckey_gen(rng);
@@ -97,10 +98,10 @@ pub mod hybrid {
             cipher.process(&inp, &mut result[prefix_len..]);
 
             let mut mac_bytes = [0; MAC_OUT_LEN];
-            mac(&mac_key, &result, &mut mac_bytes);
+            mac(&mac_key, &result, &mut mac_bytes)?;
             result.extend_from_slice(&mac_bytes);
 
-            result
+            Ok(result)
         }
     }
 
@@ -123,9 +124,11 @@ pub mod hybrid {
         xof.result(output);
     }
 
-    fn mac(key: &[u8], val: &[u8], result: &mut [u8]) {
+    fn mac(key: &[u8], val: &[u8], result: &mut [u8]) -> Result<(), &'static str>  {
         use byteorder::{BigEndian as NetworkOrder, ByteOrder};
-        assert!(result.len() <= MAC_OUT_LEN);
+        if result.len() > MAC_OUT_LEN {
+            return Err("MAC output too long.");
+        }
         let mut keylen = [0; 8];
         NetworkOrder::write_u64(&mut keylen, key.len() as u64);
 
@@ -134,6 +137,7 @@ pub mod hybrid {
         d.input(key);
         d.input(val);
         d.result(result);
+        Ok(())
     }
 
     pub struct PrivcountDecryptor {
@@ -178,7 +182,9 @@ pub mod hybrid {
 
             let mut mac_computed = [0; MAC_OUT_LEN];
             let mac_covered_portion = &inp[0..inp.len() - MAC_OUT_LEN];
-            mac(&mac_key, &mac_covered_portion, &mut mac_computed);
+            if mac(&mac_key, &mac_covered_portion, &mut mac_computed).is_err() {
+                return None;
+            }
             if !fixed_time_eq(&mac_computed, &mac_received) {
                 return None;
             }
