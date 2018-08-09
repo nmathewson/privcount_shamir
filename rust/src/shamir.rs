@@ -1,31 +1,107 @@
-// Here's an implementation of Shamir's K-of-N secret sharing over an
-// abitrary field.
+//! Implementation of Shamir's K-of-N secret sharing over an aribtrary field.
+//!
+//! Shamir's secret sharing allows you to split a secret value into
+//! `N` pieces such that any `K` pieces can be used to reconstruct the
+//! original secret, but no information can be learned from any fewer
+//! than `K` pieces.
+//!
+//! Math details: Shamir's scheme takes advantage of the fact that a
+//! `K-1`-degree polynomial is fully determined by knowing `K`
+//! distinct points on that polynomial. (Two points for a line, three
+//! for a quadratic, etc.)  So we generate a random `K-1` degree
+//! polynomial whose y-intercept is the secret, and then take the
+//! value of that polynomial for `N` other values of the x coordiate.
+//!
+//! This module requires a numerical field that implements the
+//! `NumRef` Trait; the maximum size of a secret that can be shared is
+//! the size of the field.  For privcount, we use the FE type for our
+//! field.
+//!
+//! (A field is, roughly, a mathematical object full of number-like
+//! things that support addition, subtraction, multiplication, and
+//! division, with the properties that you'd want.)
+//!
+//! # Examples
+//! ```
+//! extern crate rand;
+//! extern crate privcount;
+//! use privcount::{FE, shamir};
+//! use rand::Rng;
+//! # fn main() -> Result<(), &'static str> {
+//!
+//! // We need to use secure entropy for this, or we get no security.
+//! let mut rng = rand::os::OsRng::new().unwrap();
+//!
+//! // First, you construct a parameters object that describes how you want to share
+//! // secrets.  Each such parameters object can be used more than once.
+//!
+//! // Any 3 of 10 shares can retrieve the secret
+//! let mut builder = shamir::ParamBuilder::new(3, 10)?;
+//! builder.fill_x_coordinates(&mut rng); // Pick x coordinates randomly.
+//!
+//! let parameters = builder.finalize()?;
+//!
+//! // Now we can share a secret.  Let's share the number seven!
+//! let shares_of_7 : Vec<_> = parameters.share_secret(FE::new(7), &mut rng);
+//! assert_eq!(shares_of_7.len(), 10);
+//!
+//! // Finally, we can recover the secret from the shares.  Let's pick shares 2, 3, and 4.
+//! let result = shamir::recover_secret(&shares_of_7[2..5]);
+//!
+//! assert_eq!(result.value(), 7);
+//!
+//! // But that's not all!  If we use the same parameters to share different values,
+//! // the the sum of the shares is equal to the share of the sums!
+//! let shares_of_100 : Vec<_> = parameters.share_secret(FE::new(100), &mut rng);
+//!
+//! let sum_of_shares : Vec<_> = shares_of_7.iter()
+//!                                  .zip(shares_of_100.iter())
+//!                                  .map(|(a,b)| privcount::shamir::Share {
+//!                                        x : a.x, y: a.y + b.y })
+//!                                  .collect();
+//!
+//! let result = shamir::recover_secret(&sum_of_shares[6..9]);
+//!
+//! assert_eq!(result.value(), 107);
+//!
+//! # Ok(())
+//! # }
 
 use num::traits::NumRef;
 use rand::{Rand, Rng};
 use std::iter::FromIterator;
 use std::ops::Sub;
 
-// We don't support more than this many shares, although we could.
+/// We don't support more than this many shares, although we could.
 pub const MAX_SHARES : u32 = 1024;
 
-// A parambuilder is used to configure the secret-sharing environment.
+/// A ParamBuilder is used to configure the secret-sharing
+/// environment.
+///
+/// It gets filled in with the parts that will be used
+/// to construct the parameters for secret-sharing.  Once you're done
+/// filling it in, call `finalize()` on it to produce a `Params` object.
 pub struct ParamBuilder<N> {
     p: Params<N>,
 }
 
-// A Params structure encodes the K, the N, and the X coordinates to use
-// for the various shares
+/// A Params structure encodes the K value (number of shares needed to
+/// reconstruct secret), the N value (number of shares to generate),
+/// and the X coordinates to use for the various shares.
 pub struct Params<N> {
     k: u32,
     n: u32,
     x_coordinates: Vec<N>,
 }
 
-// A Share one of the N split shares of a secret.
+/// A Share: one of the N split shares of a secret.
 #[derive(Clone, Debug)]
 pub struct Share<N> {
+    /// The X coordinate for this share.
+    ///
+    /// Every party needs a different X coordinate; no X coordinate can be zero.
     pub x: N,
+    /// The Y coordinate for this share.
     pub y: N,
 }
 
@@ -49,36 +125,42 @@ where
         })
     }
 
-    // Add a single X coordinate manually.
-    //
-    // Most shamir implementations don't need to have configurable X
-    // coordinates, but they're needed for the kind of homomorphic
-    // shenanigans we have in mind for Privcount.
+    /// Add a single X coordinate manually.
+    ///
+    /// Most shamir implementations don't need to have configurable X
+    /// coordinates, but they're needed for the kind of homomorphic
+    /// shenanigans we have in mind for Privcount, where every TR gets its own
+    /// X coordinate.
     pub fn add_x_coordinate(&mut self, x: &N) {
         self.p.x_coordinates.push(x.clone());
     }
 
-    // Fill in the X coordinates randomly.
+    /// Fill in the X coordinates randomly
     pub fn fill_x_coordinates<R: Rng>(&mut self, rng: &mut R) {
         while self.p.x_coordinates.len() < self.p.n as usize {
             let n = rng.gen::<N>();
-            self.add_x_coordinate(&n);
+            if n != N::zero() {
+                self.add_x_coordinate(&n);
+            }
         }
     }
 
-    // Convert a ParamBuilder to a Params.
-    // Requires that the X coordinates have been filled.
+    /// Convert a ParamBuilder to a Params.
+    ///
+    /// Requires that the X coordinates have been filled with nonzero values.
     pub fn finalize(self) -> Result<Params<N>, &'static str> {
-        if self.p.x_coordinates.len() == self.p.n as usize {
-            Ok(self.p)
-        } else {
+        if self.p.x_coordinates.contains(&N::zero()) {
+            Err("No X coordinate may be zero.")
+        } else if self.p.x_coordinates.len() != self.p.n as usize {
             Err("Length mismatch in finalize.")
+        } else {
+            Ok(self.p)
         }
     }
 }
 
-// Helper: Given a polynomial's coefficients (from highest-order term
-// down to the 0th-order term), evaluate that polynomial at x.
+/// Helper: Given a polynomial's coefficients (from highest-order term
+/// down to the 0th-order term), evaluate that polynomial at x.
 fn evaluate_poly_at<N>(poly: &Vec<N>, x: &N) -> N
 where
     N: NumRef,
@@ -90,9 +172,9 @@ impl<N> Params<N>
 where
     N: NumRef + Rand + Clone,
 {
-    // Split a secret 'N' according to the given parameters.
-    //
-    // (The security of this scheme is only as good as the RNG you use.)
+    /// Split a secret 'N' according to the given parameters.
+    ///
+    /// (The security of this scheme is only as good as the RNG you use.)
     pub fn share_secret<R: Rng>(
         &self,
         secret: N,
@@ -114,8 +196,10 @@ where
     }
 }
 
-// Reconstruct a secret from any K of its shares.  (If the number of shares
-// is not the same K used to split the secret, the output will be wrong.)
+/// Reconstruct a secret from any K of its shares.
+///
+/// (If the number of shares is not the same K used to split the
+/// secret, the output will be wrong.)
 pub fn recover_secret<'a, N>(shares: &'a [Share<N>]) -> N
 where
     &'a N: Sub<&'a N, Output = N>,
