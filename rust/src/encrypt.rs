@@ -1,18 +1,36 @@
-// hybrid encryption with aes and curve25519 and sha3, as documented in
-// rend-spec-v3.txt section 2.5.3 and amended in the privcount-shamir spec.
+//! A hybrid encyption scheme used by PrivCount, and traits to support it.
+
 
 use rand::Rng;
 
+/// An encryptor is an object that knows how to compute tweaked encryptions of a
+/// given input.  It encapsulates whatever public keys or shared secrets are needed.
 pub trait Encryptor {
+    /// Encrypt the value `inp` using the tweak value `tweak`, and possibly the
+    /// secure random number generator `rng`.  The output will be longer than the input.
     fn encrypt(&self, inp: &[u8], tweak: &[u8], rng: &mut Rng) -> Result<Vec<u8>, &'static str>;
 }
 
+/// An encryptor is an object that knows how to compute tweaked
+/// encryptions of a given input.  It encapsulates whatever private
+/// keys or shared secrets are needed.
 pub trait Decryptor {
+    /// Decrypt the value `inp` using the tweak value `tweak`.  If
+    /// this returns a value, then the key and tweak were correct, and
+    /// the input was well-formed.
+    ///
+    /// Note that this function returns an Option rather than a
+    /// Result: It is generally dangerous to leak any information
+    /// about why, exactly, a plaintext couldn't be decrypted.
     fn decrypt(&self, inp: &[u8], tweak: &[u8]) -> Option<Vec<u8>>;
 }
 
+/// Functions to generate keys needed by privcount.
 pub mod keygen {
     use rand::Rng;
+    /// Generate and return a random Curve25519 secret key.
+    ///
+    /// Obviously, you must use a secure RNG.
     pub fn curve25519_seckey_gen(rng: &mut Rng) -> [u8; 32] {
         let mut result = [0; 32];
         rng.fill_bytes(&mut result);
@@ -23,7 +41,48 @@ pub mod keygen {
     }
 }
 
+/// A hybrid encryption scheme used by Privcount.
+///
+/// This scheme uses AES, curve25519, and SHA3, as documented in Tor's
+/// rend-spec-v3.txt section 2.5.3 and amended in the privcount-shamir
+/// spec.
+///
+/// # Examples
+///
+/// ```
+/// extern crate privcount;
+/// extern crate rand;
+/// extern crate crypto;
+///
+/// use privcount::encrypt::{Encryptor,Decryptor,hybrid};
+/// use crypto::curve25519;
+///
+/// # pub fn main() -> Result<(), &'static str> {
+/// // Use a secure RNG, folks.
+/// let mut rng = rand::os::OsRng::new().unwrap();
+///
+/// // Let's suppose that we have a curve25519 keypair, an ed25519 key, and a message to send.
+/// let private_key = privcount::encrypt::keygen::curve25519_seckey_gen(&mut rng);
+/// let public_key = curve25519::curve25519_base(&private_key);
+/// let identity_key = [123 ; 32];// pretend this is an ed25519 key.
+///
+/// let secret_message = b"The magic words are Theophile Escargot.";
+/// let tweak = b"example tweak";
+///
+/// // First we can encrypt using the public key:
+/// let encryptor = hybrid::PrivcountEncryptor::new(&public_key, &identity_key);
+/// let encrypted_message = encryptor.encrypt(&secret_message[..], &tweak[..], &mut rng)?;
+///
+/// // Later, the owner of the private key can decrypt:
+/// let decryptor = hybrid::PrivcountDecryptor::new(&private_key, &identity_key);
+/// let decrypted_message = decryptor.decrypt(&encrypted_message[..], &tweak[..]).unwrap();
+/// assert_eq!(&decrypted_message[..], &secret_message[..]);
+///
+/// # Ok(())
+/// # }
+/// ```
 pub mod hybrid {
+
     use super::*;
     use crypto::aes;
     use crypto::curve25519::{curve25519, curve25519_base};
@@ -40,18 +99,24 @@ pub mod hybrid {
     const S_IV_LEN: usize = 16;
     const MAC_KEY_LEN: usize = 32; // ????????? specified anywhere?
     const MAC_OUT_LEN: usize = 32;
+    /// Length of the Curve25519 public key used by this encryption.
     pub const PK_PUBLIC_LEN: usize = 32;
+    /// Length of the Curve25519 secret key used by this encryption.
     pub const PK_SECRET_LEN: usize = 32;
+    /// Length of the Ed25519 public key used by this encryption
     pub const SIGNING_PUBLIC_LEN: usize = 32;
+    /// The number of bytes added to a message by encrypting it.
     pub const ENCRYPTED_OVERHEAD: usize =
         PK_PUBLIC_LEN + SALT_LEN + MAC_OUT_LEN;
 
+    /// An Encryptor that implements the hybrid scheme used by privcount.
     pub struct PrivcountEncryptor {
         key: [u8; PK_PUBLIC_LEN],
         signing_key: [u8; SIGNING_PUBLIC_LEN],
     }
 
     impl PrivcountEncryptor {
+        /// Create a new encryptor from a public key and a signing key.
         pub fn new(
             key: &[u8; PK_PUBLIC_LEN],
             signing_key: &[u8; SIGNING_PUBLIC_LEN],
@@ -62,6 +127,7 @@ pub mod hybrid {
             }
         }
 
+        /// Return the public key used by this encryptor.
         pub fn key(&self) -> &[u8; PK_PUBLIC_LEN] {
             &self.key
         }
@@ -105,12 +171,14 @@ pub mod hybrid {
         }
     }
 
+    /// Return a random salt to be used for the hybrid encryption
     fn generate_salt(rng: &mut Rng) -> [u8; SALT_LEN] {
         let mut salt = [0; SALT_LEN];
         rng.fill_bytes(&mut salt);
         salt
     }
 
+    /// Use SHAKE256 to fill `output` with key material based on the other inputs.
     fn generate_keys(
         secret_input: &[u8],
         string_const: &[u8],
@@ -124,6 +192,7 @@ pub mod hybrid {
         xof.result(output);
     }
 
+    /// SHA3-based MAC used to authenticate encrypted info.
     fn mac(key: &[u8], val: &[u8], result: &mut [u8]) -> Result<(), &'static str>  {
         use byteorder::{BigEndian as NetworkOrder, ByteOrder};
         if result.len() > MAC_OUT_LEN {
@@ -140,12 +209,17 @@ pub mod hybrid {
         Ok(())
     }
 
+    /// An Decryptor that implements the hybrid scheme used by privcount.
     pub struct PrivcountDecryptor {
+        /// Curve25519 private key
         secret_key: [u8; PK_SECRET_LEN],
+        /// public ed25519 key.
         signing_key: [u8; SIGNING_PUBLIC_LEN],
     }
 
     impl PrivcountDecryptor {
+        /// Construct a new privcount decryptor from a curve25519 private key and a public
+        /// Ed25519 key.
         pub fn new(
             secret_key: &[u8; PK_SECRET_LEN],
             signing_key: &[u8; SIGNING_PUBLIC_LEN],
