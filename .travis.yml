@@ -45,7 +45,8 @@ install:
 
 script:
   - cd rust
-  - cargo fmt --all -- --check
+  ## Skip the rustfmt check until rustfmt is stable: see #26972 and #26973.
+  # - cargo fmt --all -- --check
   - cargo build --verbose
   - cargo test --verbose
 
