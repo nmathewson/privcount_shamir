@@ -25,8 +25,12 @@ matrix:
     - rust: beta
       os: osx
 
+install:
+  - rustup component add rustfmt-preview
+
 script:
   - cd rust
+  - cargo fmt --all -- --check
   - cargo build --verbose
   - cargo test --verbose
 
