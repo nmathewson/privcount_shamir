@@ -27,6 +27,21 @@ matrix:
 
 install:
   - rustup component add rustfmt-preview
+  ##
+  ## Finally, list installed package versions
+  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then dpkg-query --show; fi
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew list --versions; fi
+  ## Get some info about rustup, rustc, cargo, and rustfmt
+  - which rustup
+  - which rustc
+  - which cargo
+  - which rustfmt
+  ## Travis already logs rustup, rustc, and cargo
+  ## Let's log them all in the same place
+  - rustup --version
+  - rustc --version
+  - cargo --version
+  - rustfmt --version
 
 script:
   - cd rust
