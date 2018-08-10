@@ -1,3 +1,10 @@
+/// Implements that Tally Reporter side of the privcount algorithm
+///
+/// A tally reporter's job is to receive a bunch of reports from
+/// various clients, add those shares together, and give the sum of
+/// those shares to the other tally reporters so they can reconstruct
+/// the true sum.
+
 use byteorder::{ByteOrder, NetworkEndian};
 use num::Zero;
 use std::collections::HashMap;
@@ -9,19 +16,21 @@ use encrypt::hybrid::PrivcountDecryptor;
 use encrypt::Decryptor;
 use math::FE;
 
-// The data a TR recovers from a single client
+/// The data a TR recovers from a single client
 pub struct ClientData {
     #[allow(dead_code)]
     client_key: ClientKey,
     shares: Vec<(CtrId, FE)>,
 }
 
+/// The keys that a TR uses for itself.
 pub struct ServerKeys {
     pub enc_secret: [u8; 32],
     pub public: TrKeys,
 }
 
 impl ServerKeys {
+    /// Decrypt a TrData (as sent by a client) into a TrData (which we will use).
     pub fn decode_from(
         &self,
         client: &ClientKey,
@@ -81,6 +90,8 @@ impl ServerKeys {
     }
 }
 
+/// Given a set of ClientData from different clients, compute the sum
+/// for each distinct counter in those ClientDara objects.
 pub fn sum_shares(client_data: &[ClientData]) -> HashMap<CtrId, FE> {
     let mut result = HashMap::new();
 

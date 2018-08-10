@@ -1,6 +1,6 @@
 // Fail hard on warnings.  This will be automatically disabled when we're
 // used as a dependency by other crates, thanks to Cargo magic.
-#![deny(warnings)]
+#![deny(warnings, missing_docs)]
 // Enable as many useful Rust warnings as we can stand.  We'd
 // also enable `trivial_casts`, but we're waiting for
 // https://github.com/rust-lang/rust/issues/23416.
@@ -15,7 +15,6 @@
 //#![warn(
 //    missing_copy_implementations,
 //    missing_debug_implementations,
-//    missing_docs
 //)]
 // Enable i128 on nightly
 #![cfg_attr(feature = "nightly", feature(i128_type))]

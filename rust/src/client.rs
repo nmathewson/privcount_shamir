@@ -1,3 +1,12 @@
+//! Client implementation for privcount protocols.
+//!
+//! This module handles creating a bunch of counters, blinding and
+//! encrypting them, incrementing them, and finally sending shares of
+//! those counters to the Tally Reporters (or "TR"s.)
+//!
+//! For more information about the design and motivation for this
+//! protocol, see the privcount specification.
+
 use std::collections::HashMap;
 use std::iter::FromIterator;
 use std::u32;
@@ -12,8 +21,11 @@ use encrypt::hybrid::PrivcountEncryptor;
 use encrypt::Encryptor;
 use shamir;
 
-// Stuff that we store about, or transmit to, a TR.
-
+/// Create a new random seed for a TR, and encrypt it to the TR.
+///
+/// On success, returns the Seed object, and the encrypted message.
+///
+/// Use a secure RNG here, or the seed will be predictable.
 fn new_seed<R: Rng>(rng: &mut R, keys: &TrKeys) -> Result<(Seed, Vec<u8>),&'static str> {
     let mut seed = Vec::new();
     seed.resize(SEED_LEN, 0);
@@ -24,14 +36,24 @@ fn new_seed<R: Rng>(rng: &mut R, keys: &TrKeys) -> Result<(Seed, Vec<u8>),&'stat
     Ok((Seed::from_bytes(&seed)?, encrypted))
 }
 
+/// All the data that a client stores about, or transmits to, a TR.
 pub struct TrState {
+    /// The TR's keys
     keys: TrKeys,
+    /// A seed value, encrypted to the TR's public key.
     encrypted_seed: Vec<u8>,
+    /// The X coordinate of the TR's shares.
     x: FE,
+    /// A set of blinded counters for this TR.
+    ///
+    /// Note that these counters don't leak any information on their own: They are useless
+    /// without being able to decrypt the encrypted seed.
     counters: Vec<FE>,
 }
 
 impl TrState {
+    /// Create a new TrState for a TR with a given set of keys and a
+    /// given number of counters.
     fn new<R: Rng>(rng: &mut R, keys: &TrKeys, n_counters: u32)
                    -> Result<Self, &'static str> {
         let (seed, encrypted_seed) = new_seed(rng, keys)?;
@@ -44,6 +66,7 @@ impl TrState {
         })
     }
 
+    /// Convert a TRState to a TRData, ready to be sent to a TR.
     fn finalize<R: Rng>(self, rng: &mut R) -> Result<TrData, &'static str> {
         let enc =
             PrivcountEncryptor::new(&self.keys.enc_key, &self.keys.signing_key);
@@ -58,11 +81,27 @@ impl TrState {
     }
 }
 
+/// A CounterSet is a client's view of all of its counters
 pub struct CounterSet {
+    /// A list of all of the counter IDs that the client is tracking
     counter_ids: Vec<CtrId>, // XXXX use strings??
+    /// A map frounc couter ID to actual counter values.
     counters: HashMap<CtrId, Counter>,
+    /// A set of TR states for all of the TRs that the client knows about.
+    ///
+    /// Invariant: These objects must have the same number of counters
+    /// as are in this CounterSet.
     tr_states: Vec<TrState>,
 }
+
+/// Information to track a client's view of a single counter.
+///
+/// Note that these values are stored in a blinded form, and don't
+/// actually convey any information unless you can decrypt the
+/// encrypted seed data.
+///
+/// Note that these values wrap at PRIME_ORDER, so you should make
+/// sure that no counter's total is too close to that value.
 
 #[derive(Debug, Clone)]
 pub struct Counter {
@@ -71,21 +110,27 @@ pub struct Counter {
 }
 
 impl Counter {
+    /// Create a new counter with a given counter ID and value zero.
     fn new(id: CtrId) -> Counter {
         Counter {
             id,
             val: FE::zero(),
         }
     }
+    /// Add a value to this counter.
     pub fn inc(&mut self, v: u32) {
         self.val += FE::from(v);
     }
+    /// Subtract a value from this counter.
     pub fn dec(&mut self, v: u32) {
         self.val -= FE::from(v);
     }
 }
 
 impl CounterSet {
+    /// Create a new CounterSet to track values for a given number of
+    /// counters, enrypted to a given set of TR keys.  Any set of `k`
+    /// TRs will be able to find the actual counter values.
     pub fn new<R: Rng>(
         rng: &mut R,
         counter_ids: &[CtrId],
@@ -143,10 +188,13 @@ impl CounterSet {
         })
     }
 
+    /// Return a reference to the counter with a given ID, if one exists.
     pub fn ctr(&mut self, ctr_id: CtrId) -> Option<&mut Counter> {
         self.counters.get_mut(&ctr_id)
     }
 
+    /// Finalize this CounterSet, and return a CounterData to be distributed in pieces
+    /// to the TRs.
     pub fn finalize<R: Rng>(mut self, rng: &mut R) -> Result<CounterData, &'static str> {
         let counter_ids = self.counter_ids;
 
