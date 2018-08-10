@@ -21,9 +21,9 @@ dist: trusty
 matrix:
   allow_failures:
     - rust: nightly
-    ## For some reason, the beta channel doesn't install on OS X
-    - rust: beta
-      os: osx
+    ## The beta channel used to fail on OS X, but now it works
+    # - rust: beta
+    #   os: osx
 
 install:
   - rustup component add rustfmt-preview
