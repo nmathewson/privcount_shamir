@@ -1,9 +1,9 @@
-/// Implements that Tally Reporter side of the privcount algorithm
-///
-/// A tally reporter's job is to receive a bunch of reports from
-/// various clients, add those shares together, and give the sum of
-/// those shares to the other tally reporters so they can reconstruct
-/// the true sum.
+//! Implements that Tally Reporter side of the privcount algorithm
+//!
+//! A tally reporter's job is to receive a bunch of reports from
+//! various clients, add those shares together, and give the sum of
+//! those shares to the other tally reporters so they can reconstruct
+//! the true sum.
 
 use byteorder::{ByteOrder, NetworkEndian};
 use num::Zero;
@@ -25,7 +25,9 @@ pub struct ClientData {
 
 /// The keys that a TR uses for itself.
 pub struct ServerKeys {
+    /// The secret curve25519 private key used to decryption.
     pub enc_secret: [u8; 32],
+    /// The public keys for this TR
     pub public: TrKeys,
 }
 

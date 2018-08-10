@@ -1,3 +1,11 @@
+//! Privcount is a system for numerous data collectors, or "clients",
+//! to count things without actually storing the values they are conting.
+//!
+//! Later, a bunch of servers, called "Tally Reporters" (TRs), collect
+//! data from clients.  The Tally Reporters collectively compute the
+//! sum of the data from all the clients, without any TR learning any
+//! individual client's counts.
+
 // Fail hard on warnings.  This will be automatically disabled when we're
 // used as a dependency by other crates, thanks to Cargo magic.
 #![deny(warnings, missing_docs)]

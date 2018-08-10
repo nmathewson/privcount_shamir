@@ -109,6 +109,7 @@ impl<N> ParamBuilder<N>
 where
     N: NumRef + Clone + Rand,
 {
+    /// Create a new ParamBuilder.
     pub fn new(k: u32, n: u32) -> Result<Self, &'static str> {
         if k > n {
             return Err("Invalid parameters: k > n.");
