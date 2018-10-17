@@ -85,7 +85,7 @@ impl TrState {
 pub struct CounterSet {
     /// A list of all of the counter IDs that the client is tracking
     counter_ids: Vec<CtrId>, // XXXX use strings??
-    /// A map frounc couter ID to actual counter values.
+    /// A map from couter ID to actual counter values.
     counters: HashMap<CtrId, Counter>,
     /// A set of TR states for all of the TRs that the client knows about.
     ///

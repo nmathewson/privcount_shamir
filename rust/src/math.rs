@@ -86,8 +86,8 @@ pub struct FE {
     val: u64,
 }
 
-/// Given a value in range 0..U64_MAX, returns a value in range 0..FE_VAL_MAX that
-/// is equavalent modulo PRIME_ORDER.
+/// Given a value in range 0..U64_MAX, returns a value in range
+/// 0..FE_VAL_MAX that is equivalent modulo PRIME_ORDER.
 ///
 /// Given a value in range 0..FE_VAL_MAX, return an output in range
 /// 0..FULL_BITS_MASK that is equivalent modulo PRIME_ORDER.
