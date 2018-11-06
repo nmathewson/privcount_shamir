@@ -48,13 +48,12 @@ impl ServerKeys {
         }
         // XX  Use try_from once it's stable
         if counters.len() > u32::MAX as usize {
-            return Err("Too many counters.")
+            return Err("Too many counters.");
         }
-        let n_counters : u32 = counters.len() as u32;
+        let n_counters: u32 = counters.len() as u32;
 
         // It is for us.  Recover the encrypted things.
-        let dec =
-            PrivcountDecryptor::new(&self.enc_secret, &self.public.signing_key);
+        let dec = PrivcountDecryptor::new(&self.enc_secret, &self.public.signing_key);
 
         let seedval = dec
             .decrypt(&data.encrypted_seed, SEED_ENCRYPTION_TWEAK)

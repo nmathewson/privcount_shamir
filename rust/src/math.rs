@@ -74,8 +74,7 @@ const MAX_EXCESS: u64 = (1 << REMAINING_BITS) - 1;
 /// Largest value to use in representing out field elements.  This will spill
 /// over our regular bit mask by a little, since we don't store stuff
 /// in a fully bit-reduced form.
-const FE_VAL_MAX: u64 =
-    FULL_BITS_MASK + (MAX_EXCESS << OFFSET_BIT) + MAX_EXCESS;
+const FE_VAL_MAX: u64 = FULL_BITS_MASK + (MAX_EXCESS << OFFSET_BIT) + MAX_EXCESS;
 
 /// A member of the prime field used for Privcount.
 #[derive(Debug, Copy, Clone)]
@@ -626,10 +625,7 @@ mod tests {
         assert_eq!(-FE::new(10) + (-FE::new(15)), -FE::new(25));
 
         assert_eq!(-maxrep(), FE::new(PRIME_ORDER * 2 - FE_VAL_MAX));
-        assert_eq!(
-            maxrep() + maxrep(),
-            FE::new((FE_VAL_MAX - PRIME_ORDER) * 2)
-        );
+        assert_eq!(maxrep() + maxrep(), FE::new((FE_VAL_MAX - PRIME_ORDER) * 2));
         assert_eq!(maxrep() - maxrep(), FE::zero());
         assert_eq!(FE::zero() - maxrep(), -maxrep());
 
@@ -657,13 +653,11 @@ mod tests {
 
         assert_eq!(
             maxrep() * maxrep(),
-            FE::new(FE_VAL_MAX % PRIME_ORDER)
-                * FE::new(FE_VAL_MAX % PRIME_ORDER)
+            FE::new(FE_VAL_MAX % PRIME_ORDER) * FE::new(FE_VAL_MAX % PRIME_ORDER)
         );
         assert_eq!(
             fullbits() * fullbits(),
-            FE::new(FULL_BITS_MASK % PRIME_ORDER)
-                * FE::new(FULL_BITS_MASK % PRIME_ORDER)
+            FE::new(FULL_BITS_MASK % PRIME_ORDER) * FE::new(FULL_BITS_MASK % PRIME_ORDER)
         )
     }
     #[test]

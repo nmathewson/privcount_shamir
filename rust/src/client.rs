@@ -26,7 +26,7 @@ use shamir;
 /// On success, returns the Seed object, and the encrypted message.
 ///
 /// Use a secure RNG here, or the seed will be predictable.
-fn new_seed<R: Rng>(rng: &mut R, keys: &TrKeys) -> Result<(Seed, Vec<u8>),&'static str> {
+fn new_seed<R: Rng>(rng: &mut R, keys: &TrKeys) -> Result<(Seed, Vec<u8>), &'static str> {
     let mut seed = Vec::new();
     seed.resize(SEED_LEN, 0);
     rng.fill_bytes(&mut seed);
@@ -54,8 +54,7 @@ pub struct TrState {
 impl TrState {
     /// Create a new TrState for a TR with a given set of keys and a
     /// given number of counters.
-    fn new<R: Rng>(rng: &mut R, keys: &TrKeys, n_counters: u32)
-                   -> Result<Self, &'static str> {
+    fn new<R: Rng>(rng: &mut R, keys: &TrKeys, n_counters: u32) -> Result<Self, &'static str> {
         let (seed, encrypted_seed) = new_seed(rng, keys)?;
         let counters = seed.counter_masks(n_counters)?;
         Ok(TrState {
@@ -68,16 +67,19 @@ impl TrState {
 
     /// Convert a TRState to a TRData, ready to be sent to a TR.
     fn finalize<R: Rng>(self, rng: &mut R) -> Result<TrData, &'static str> {
-        let enc =
-            PrivcountEncryptor::new(&self.keys.enc_key, &self.keys.signing_key);
-        let u64s =
-            Vec::from_iter(self.counters.into_iter().map(|fe| fe.value()));
+        let enc = PrivcountEncryptor::new(&self.keys.enc_key, &self.keys.signing_key);
+        let u64s = Vec::from_iter(self.counters.into_iter().map(|fe| fe.value()));
         let mut encoded = Vec::with_capacity(u64s.len() * 8);
         encoded.resize(u64s.len() * 8, 0);
         NetworkEndian::write_u64_into(&u64s, &mut encoded[..]);
         let encrypted = enc.encrypt(&encoded, Y_ENCRYPTION_TWEAK, rng)?;
 
-        Ok(TrData::new(&self.keys, self.encrypted_seed, self.x, encrypted))
+        Ok(TrData::new(
+            &self.keys,
+            self.encrypted_seed,
+            self.x,
+            encrypted,
+        ))
     }
 }
 
@@ -148,8 +150,10 @@ impl CounterSet {
         let n_counters = counter_ids.len() as u32;
         let n_trs = tr_ids.len() as u32;
         let mut tr_states = {
-            let mut tr_states_result : Result< Vec<_>, _> =
-                tr_ids.iter().map(|k| TrState::new(rng, k, n_counters)).collect();
+            let mut tr_states_result: Result<Vec<_>, _> = tr_ids
+                .iter()
+                .map(|k| TrState::new(rng, k, n_counters))
+                .collect();
             tr_states_result?
         };
 
@@ -199,14 +203,20 @@ impl CounterSet {
         let counter_ids = self.counter_ids;
 
         for (idx, cid) in counter_ids.iter().enumerate() {
-            let counter = self.counters.get(cid).ok_or("Internal error: missing counter.")?;
+            let counter = self
+                .counters
+                .get(cid)
+                .ok_or("Internal error: missing counter.")?;
             for trs in self.tr_states.iter_mut() {
                 trs.counters[idx] += counter.val;
             }
         }
 
-        let tr_data : Result<Vec<_>, _>  =
-            self.tr_states.into_iter().map(|state| state.finalize(rng)).collect();
+        let tr_data: Result<Vec<_>, _> = self
+            .tr_states
+            .into_iter()
+            .map(|state| state.finalize(rng))
+            .collect();
 
         Ok(CounterData::new(counter_ids, tr_data?))
     }

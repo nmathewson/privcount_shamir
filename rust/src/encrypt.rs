@@ -1,6 +1,5 @@
 //! A hybrid encyption scheme used by PrivCount, and traits to support it.
 
-
 use rand::Rng;
 
 /// An encryptor is an object that knows how to compute tweaked encryptions of a
@@ -106,8 +105,7 @@ pub mod hybrid {
     /// Length of the Ed25519 public key used by this encryption
     pub const SIGNING_PUBLIC_LEN: usize = 32;
     /// The number of bytes added to a message by encrypting it.
-    pub const ENCRYPTED_OVERHEAD: usize =
-        PK_PUBLIC_LEN + SALT_LEN + MAC_OUT_LEN;
+    pub const ENCRYPTED_OVERHEAD: usize = PK_PUBLIC_LEN + SALT_LEN + MAC_OUT_LEN;
 
     /// An Encryptor that implements the hybrid scheme used by privcount.
     pub struct PrivcountEncryptor {
@@ -117,10 +115,7 @@ pub mod hybrid {
 
     impl PrivcountEncryptor {
         /// Create a new encryptor from a public key and a signing key.
-        pub fn new(
-            key: &[u8; PK_PUBLIC_LEN],
-            signing_key: &[u8; SIGNING_PUBLIC_LEN],
-        ) -> Self {
+        pub fn new(key: &[u8; PK_PUBLIC_LEN], signing_key: &[u8; SIGNING_PUBLIC_LEN]) -> Self {
             PrivcountEncryptor {
                 key: *key,
                 signing_key: *signing_key,
@@ -134,8 +129,12 @@ pub mod hybrid {
     }
 
     impl Encryptor for PrivcountEncryptor {
-        fn encrypt(&self, inp: &[u8], tweak: &[u8], rng: &mut Rng)
-                   -> Result<Vec<u8>, &'static str> {
+        fn encrypt(
+            &self,
+            inp: &[u8],
+            tweak: &[u8],
+            rng: &mut Rng,
+        ) -> Result<Vec<u8>, &'static str> {
             let mut keys = [0; S_KEY_LEN + S_IV_LEN + MAC_KEY_LEN];
 
             let seckey_tmp = super::keygen::curve25519_seckey_gen(rng);
@@ -157,8 +156,7 @@ pub mod hybrid {
             result.extend_from_slice(&pubkey_tmp);
             result.extend_from_slice(&salt);
 
-            let mut cipher =
-                aes::ctr(aes::KeySize::KeySize256, enc_key, enc_iv);
+            let mut cipher = aes::ctr(aes::KeySize::KeySize256, enc_key, enc_iv);
             let prefix_len = result.len();
             result.resize(prefix_len + inp.len(), 0);
             cipher.process(&inp, &mut result[prefix_len..]);
@@ -179,12 +177,7 @@ pub mod hybrid {
     }
 
     /// Use SHAKE256 to fill `output` with key material based on the other inputs.
-    fn generate_keys(
-        secret_input: &[u8],
-        string_const: &[u8],
-        salt: &[u8],
-        output: &mut [u8],
-    ) {
+    fn generate_keys(secret_input: &[u8], string_const: &[u8], salt: &[u8], output: &mut [u8]) {
         let mut xof = sha3::Sha3::shake_256();
         xof.input(secret_input);
         xof.input(salt);
@@ -193,7 +186,7 @@ pub mod hybrid {
     }
 
     /// SHA3-based MAC used to authenticate encrypted info.
-    fn mac(key: &[u8], val: &[u8], result: &mut [u8]) -> Result<(), &'static str>  {
+    fn mac(key: &[u8], val: &[u8], result: &mut [u8]) -> Result<(), &'static str> {
         use byteorder::{BigEndian as NetworkOrder, ByteOrder};
         if result.len() > MAC_OUT_LEN {
             return Err("MAC output too long.");
@@ -263,8 +256,7 @@ pub mod hybrid {
                 return None;
             }
 
-            let mut cipher =
-                aes::ctr(aes::KeySize::KeySize256, enc_key, enc_iv);
+            let mut cipher = aes::ctr(aes::KeySize::KeySize256, enc_key, enc_iv);
             let mut result = Vec::new();
             result.resize(enc.len(), 0);
             cipher.process(&enc, &mut result);
