@@ -51,7 +51,7 @@ pub struct CounterData {
 }
 
 /// How many counters will we support?
-pub const MAX_COUNTERS : u32 = 1 << 28;
+pub const MAX_COUNTERS: u32 = 1 << 28;
 
 /// Tweak value used when encrypting the privcount seed.
 pub const SEED_ENCRYPTION_TWEAK: &'static [u8] = b"privctr-seed-v1";
@@ -86,12 +86,7 @@ impl CounterData {
 
 impl TrData {
     /// Construct a new TRData object.
-    pub fn new(
-        keys: &TrKeys,
-        encrypted_seed: Vec<u8>,
-        x: FE,
-        encrypted_counters: Vec<u8>,
-    ) -> Self {
+    pub fn new(keys: &TrKeys, encrypted_seed: Vec<u8>, x: FE, encrypted_counters: Vec<u8>) -> Self {
         TrData {
             keys: keys.clone(),
             encrypted_seed,
@@ -127,7 +122,7 @@ impl Seed {
         }
 
         // With very high probability, this is more data than we need.
-        let bytes_needed : usize = (n_masks + EXTRA_MASKS) as usize * (8 + EXTRA_BYTES_PER_MASK);
+        let bytes_needed: usize = (n_masks + EXTRA_MASKS) as usize * (8 + EXTRA_BYTES_PER_MASK);
 
         let mut xof = sha3::Sha3::shake_256();
         let mut bytes = Vec::new();

@@ -26,22 +26,14 @@ fn gen_server_keys(rng: &mut Rng) -> server::ServerKeys {
     }
 }
 
-fn test_combination(
-    n_counters: u32,
-    n_clients: u32,
-    n_trs: u32,
-    k_value: u32,
-) {
+fn test_combination(n_counters: u32, n_clients: u32, n_trs: u32, k_value: u32) {
     let mut rng = OsRng::new().unwrap();
 
     assert!(k_value <= n_trs);
 
-    let server_keys =
-        Vec::from_iter((0..n_trs).map(|_| gen_server_keys(&mut rng)));
-    let tr_keys =
-        Vec::from_iter(server_keys.iter().map(|sk| sk.public.clone()));
-    let counter_ids =
-        Vec::from_iter((1..n_counters + 1).map(|n| CtrId(n as u32)));
+    let server_keys = Vec::from_iter((0..n_trs).map(|_| gen_server_keys(&mut rng)));
+    let tr_keys = Vec::from_iter(server_keys.iter().map(|sk| sk.public.clone()));
+    let counter_ids = Vec::from_iter((1..n_counters + 1).map(|n| CtrId(n as u32)));
 
     let mut client_data = Vec::new();
 
@@ -49,8 +41,7 @@ fn test_combination(
 
     // simulate each client.
     for client_idx in 0..n_clients {
-        let mut ctrs =
-            client::CounterSet::new(&mut rng, &counter_ids, &tr_keys, k_value).unwrap();
+        let mut ctrs = client::CounterSet::new(&mut rng, &counter_ids, &tr_keys, k_value).unwrap();
 
         for id in counter_ids.iter() {
             let to_add = id.0 + (client_idx * 17) as u32; // add a dummy value
